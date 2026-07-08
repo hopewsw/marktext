@@ -45,7 +45,12 @@ const defaultFileStateWithoutId = {
   },
   scrollTop: 0,
   muyaIndexCursor: null,
-  notifications: []
+  notifications: [],
+  isEncrypted: false,
+  isLocked: false,
+  rememberSession: false,
+  sessionKeyActive: false,
+  encryptionMeta: undefined
 } satisfies Omit<IFileState, 'id'>
 
 /**
@@ -63,9 +68,21 @@ export const getOptionsFromState = (
   lineEnding: IFileState['lineEnding']
   adjustLineEndingOnSave: boolean
   trimTrailingNewline: number
+  isEncrypted?: boolean
+  useSessionKey?: boolean
+  encryptionPassword?: string
+  encryptionKeepBackup?: boolean
+  encryptionPbkdf2Iterations?: number
 } => {
-  const { encoding, lineEnding, adjustLineEndingOnSave, trimTrailingNewline } = file
-  return { encoding, lineEnding, adjustLineEndingOnSave, trimTrailingNewline }
+  const { encoding, lineEnding, adjustLineEndingOnSave, trimTrailingNewline, isEncrypted, sessionKeyActive } = file
+  return {
+    encoding,
+    lineEnding,
+    adjustLineEndingOnSave,
+    trimTrailingNewline,
+    isEncrypted,
+    useSessionKey: !!isEncrypted && !!sessionKeyActive
+  }
 }
 
 const documentStateKeys = [
@@ -83,7 +100,12 @@ const documentStateKeys = [
   'searchMatches',
   'scrollTop',
   'muyaIndexCursor',
-  'notifications'
+  'notifications',
+  'isEncrypted',
+  'isLocked',
+  'rememberSession',
+  'sessionKeyActive',
+  'encryptionMeta'
 ] as const satisfies ReadonlyArray<keyof IFileState>
 
 export const getBlankFileState = (

@@ -28,6 +28,13 @@ export default function(
       }
     },
     {
+      label: t('menu.file.newEncryptedTab'),
+      id: 'newEncryptedTabMenuItem',
+      click(_menuItem, browserWindow) {
+        actions.newEncryptedTab(browserWindow as BrowserWindow | undefined)
+      }
+    },
+    {
       type: 'separator'
     },
     {
@@ -114,6 +121,22 @@ export default function(
       accelerator: keybindings.getAccelerator('file.save-as') ?? undefined,
       click(_menuItem, browserWindow) {
         actions.saveAs(browserWindow as BrowserWindow | undefined)
+      }
+    },
+    {
+      label: t('menu.file.lockDocument'),
+      id: 'lockDocumentMenuItem',
+      enabled: false,
+      click(_menuItem, browserWindow) {
+        actions.lockDocument(browserWindow as BrowserWindow | undefined)
+      }
+    },
+    {
+      label: t('menu.file.changePassword'),
+      id: 'changePasswordMenuItem',
+      enabled: false,
+      click(_menuItem, browserWindow) {
+        actions.changePassword(browserWindow as BrowserWindow | undefined)
       }
     },
     {

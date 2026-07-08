@@ -12,6 +12,14 @@ import type {
 } from '@shared/types/ipc'
 import type { MenuTemplate, MenuPopupPosition } from '@shared/types/menu'
 import type { SerializedStat } from '@shared/types/files'
+import type {
+  MdeUnlockRequest,
+  MdeUnlockResponse,
+  MdeChangePasswordRequest,
+  MdeCreateEmptyRequest,
+  MdeLockPayload,
+  MdePromptUnlockPayload
+} from '@shared/types/encryption'
 
 declare global {
   // ---- Build-time defines (electron-vite `define`) ----
@@ -165,6 +173,18 @@ declare global {
     list(): Promise<string[]>
   }
 
+  interface MdeUtilsAPI {
+    unlock(req: MdeUnlockRequest): Promise<MdeUnlockResponse>
+    lock(payload: MdeLockPayload): void
+    changePassword(req: MdeChangePasswordRequest): Promise<{ ok: true }>
+    createEmpty(req: MdeCreateEmptyRequest): Promise<{ ok: true }>
+    hasSessionKey(pathname: string): Promise<boolean>
+    isEncryptedFile(pathname: string): Promise<boolean>
+    hasBackup(pathname: string): Promise<boolean>
+    restoreFromBackup(pathname: string): Promise<{ ok: true }>
+    onPromptUnlock(handler: (payload: MdePromptUnlockPayload) => void): () => void
+  }
+
   interface ProcessShim {
     platform: NodeJS.Platform
     arch?: string
@@ -184,6 +204,7 @@ declare global {
     ripgrep: RipgrepAPI
     uploader: UploaderAPI
     fonts: FontsAPI
+    mdeUtils: MdeUtilsAPI
     process: ProcessShim
     rgPath: string
     // Set by the legacy editor store at runtime; consumed by muya internals.

@@ -18,7 +18,7 @@
           @click.middle="closeTab(file.id)"
           @contextmenu.prevent="handleContextMenu($event, file)"
         >
-          <span>{{ file.filename }}</span>
+          <span>{{ tabLabel(file) }}</span>
           <span class="unsaved-dot" />
           <el-icon
             class="close-icon"
@@ -45,6 +45,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useEditorStore } from '@/store/editor'
 import { useLayoutStore } from '@/store/layout'
+import { usePreferencesStore } from '@/store/preferences'
 import { storeToRefs } from 'pinia'
 import autoScroll from 'dom-autoscroller'
 import dragula from 'dragula'
@@ -55,8 +56,10 @@ import type { IFileState } from '@shared/types/files'
 
 const editorStore = useEditorStore()
 const layoutStore = useLayoutStore()
+const preferencesStore = usePreferencesStore()
 
 const { currentFile, tabs } = storeToRefs(editorStore)
+const { encryptionShowLockIcon } = storeToRefs(preferencesStore)
 
 const tabContainer = ref<HTMLElement | null>(null)
 const tabDropContainer = ref<HTMLElement | null>(null)
@@ -71,7 +74,25 @@ let drake: dragula.Drake | null = null
 const selectFile = (file: IFileState) => {
   if (file.id !== currentFile.value?.id) {
     editorStore.UPDATE_CURRENT_FILE(file)
+    if (file.isLocked) {
+      bus.emit('mde::show-unlock', {
+        tabId: file.id,
+        pathname: file.pathname,
+        filename: file.filename
+      })
+    }
+  } else if (file.isLocked) {
+    bus.emit('mde::show-unlock', {
+      tabId: file.id,
+      pathname: file.pathname,
+      filename: file.filename
+    })
   }
+}
+
+const tabLabel = (file: IFileState): string => {
+  if (!file.isEncrypted || !encryptionShowLockIcon.value) return file.filename
+  return `${file.filename} ${file.isLocked ? '🔒' : '🔓'}`
 }
 
 const removeFileInTab = (file: IFileState) => {

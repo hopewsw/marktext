@@ -224,9 +224,14 @@ body {
   padding: 8px 6px;
 }
 
-input.el-input__inner {
+.el-input__wrapper {
   background: var(--inputBgColor);
-  border: 1px solid var(--editorColor10);
+  box-shadow: 0 0 0 1px var(--editorColor10) inset;
+}
+
+input.el-input__inner {
+  background: transparent;
+  border: none;
   color: var(--editorColor80);
 }
 

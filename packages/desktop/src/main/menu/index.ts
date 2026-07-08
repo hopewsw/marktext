@@ -8,6 +8,7 @@ import { updateSidebarMenu } from '../menu/actions/edit'
 import { updateFormatMenu } from '../menu/actions/format'
 import { updateSelectionMenus } from '../menu/actions/paragraph'
 import { viewLayoutChanged } from '../menu/actions/view'
+import { encryptionMenuChanged } from '../menu/actions/file'
 import configureMenu, { configSettingMenu } from '../menu/templates'
 import { setLanguage } from '../i18n.js'
 
@@ -468,6 +469,20 @@ class AppMenu {
           return
         }
         viewLayoutChanged(this.getWindowMenuById(windowId), viewSettings)
+      }
+    )
+    ipcMain.on(
+      'mt::update-encryption-menu',
+      (
+        _e,
+        windowId: number,
+        state: { lockEnabled: boolean; changePasswordEnabled: boolean }
+      ) => {
+        if (!this.has(windowId)) {
+          log.error(`UpdateApplicationMenu: Cannot find window menu for window id ${windowId}.`)
+          return
+        }
+        encryptionMenuChanged(this.getWindowMenuById(windowId), state)
       }
     )
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

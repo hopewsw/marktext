@@ -17,6 +17,13 @@ import type {
   IpcMainEventChannels,
   BootInfo
 } from '@shared/types/ipc'
+import type {
+  MdeUnlockRequest,
+  MdeChangePasswordRequest,
+  MdeCreateEmptyRequest,
+  MdeLockPayload,
+  MdePromptUnlockPayload
+} from '@shared/types/encryption'
 
 type RendererEventListener<K extends keyof IpcMainEventChannels> = (
   event: IpcRendererEvent,
@@ -226,6 +233,22 @@ const fontsAPI = {
   list: () => invoke('mt::fonts::list')
 }
 
+const mdeUtilsAPI = {
+  unlock: (req: MdeUnlockRequest) => invoke('mt::mde::unlock', req),
+  lock: (payload: MdeLockPayload) => send('mt::mde::lock', payload),
+  changePassword: (req: MdeChangePasswordRequest) => invoke('mt::mde::change-password', req),
+  createEmpty: (req: MdeCreateEmptyRequest) => invoke('mt::mde::create-empty', req),
+  hasSessionKey: (pathname: string) => invoke('mt::mde::has-session-key', pathname),
+  isEncryptedFile: (pathname: string) => invoke('mt::mde::is-encrypted-file', pathname),
+  hasBackup: (pathname: string) => invoke('mt::mde::has-backup', pathname),
+  restoreFromBackup: (pathname: string) => invoke('mt::mde::restore-from-backup', pathname),
+  onPromptUnlock: (handler: (payload: MdePromptUnlockPayload) => void) => {
+    const sub = (_e: IpcRendererEvent, payload: MdePromptUnlockPayload) => handler(payload)
+    ipcRenderer.on('mt::mde::prompt-unlock', sub)
+    return () => ipcRenderer.removeListener('mt::mde::prompt-unlock', sub)
+  }
+}
+
 const electronAPI = {
   ipcRenderer: ipcWrapper,
   shell: shellAPI,
@@ -294,6 +317,7 @@ try {
   contextBridge.exposeInMainWorld('ripgrep', ripgrepAPI)
   contextBridge.exposeInMainWorld('uploader', uploaderAPI)
   contextBridge.exposeInMainWorld('fonts', fontsAPI)
+  contextBridge.exposeInMainWorld('mdeUtils', mdeUtilsAPI)
 } catch (error) {
   console.error(error)
 }

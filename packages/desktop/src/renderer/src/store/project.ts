@@ -274,6 +274,19 @@ export const useProjectStore = defineStore('project', () => {
     const cache = createCache.value as any
     const { dirname, type } = cache
 
+    if (type === 'encrypted-file') {
+      if (!name.toLowerCase().endsWith('.mde')) {
+        name += '.mde'
+      }
+      const fullName = `${dirname}/${name}`
+      createCache.value = {}
+      bus.emit('mde::create-encrypted-file', {
+        pathname: fullName,
+        filename: window.path.basename(fullName)
+      })
+      return
+    }
+
     if (type === 'file' && !window.fileUtils.hasMarkdownExtension(name)) {
       name += '.md'
     }

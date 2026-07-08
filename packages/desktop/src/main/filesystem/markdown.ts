@@ -3,10 +3,12 @@ import path from 'path'
 import log from 'electron-log'
 import iconv from 'iconv-lite'
 import { LINE_ENDING_REG, LF_LINE_ENDING_REG, CRLF_LINE_ENDING_REG } from '../config'
-import { isDirectory2 } from 'common/filesystem'
-import { isMarkdownFile } from 'common/filesystem/paths'
+import { isDirectory2, isFile2 } from 'common/filesystem'
+import { isMarkdownFile, hasEncryptedMarkdownExtension } from 'common/filesystem/paths'
 import { normalizeAndResolvePath, writeFile } from '../filesystem'
 import { guessEncoding } from './encoding'
+import { sessionVault } from '../crypto/sessionVault'
+import { loadMdeFile, peekMdeHeader } from './mde'
 import type { Encoding } from 'common/encoding'
 import type { LineEnding } from '@shared/types/files'
 
@@ -25,6 +27,12 @@ interface MarkdownDocumentRaw {
   adjustLineEndingOnSave: boolean
   trimTrailingNewline: number
   isMixedLineEndings: boolean
+  isEncrypted?: boolean
+  isLocked?: boolean
+  encryptionMeta?: {
+    pbkdf2Iterations: number
+    formatVersion: number
+  }
 }
 
 const getLineEnding = (lineEnding: LineEnding): string => {
@@ -52,7 +60,11 @@ export const normalizeMarkdownPath = (
   pathname: string
 ): { isDir: boolean; path: string } | null => {
   const isDir = isDirectory2(pathname)
-  if (isDir || isMarkdownFile(pathname)) {
+  if (
+    isDir ||
+    isMarkdownFile(pathname) ||
+    (isFile2(pathname) && hasEncryptedMarkdownExtension(pathname))
+  ) {
     const resolved = normalizeAndResolvePath(pathname)
     if (resolved) {
       return { isDir, path: resolved }
@@ -95,6 +107,45 @@ export const loadMarkdownFile = async(
   trimTrailingNewline: number = 2,
   autoNormalizeLineEndings: boolean = false
 ): Promise<MarkdownDocumentRaw> => {
+  const resolvedPath = path.resolve(pathname)
+
+  if (hasEncryptedMarkdownExtension(resolvedPath)) {
+    const encryptedBase = {
+      filename: path.basename(resolvedPath),
+      pathname: resolvedPath,
+      encoding: { encoding: 'utf8', isBom: false } as Encoding,
+      lineEnding: 'lf' as LineEnding,
+      adjustLineEndingOnSave: false,
+      trimTrailingNewline: 2,
+      isMixedLineEndings: false,
+      isEncrypted: true
+    }
+
+    if (sessionVault.has(resolvedPath)) {
+      const { plaintext, header } = await loadMdeFile(resolvedPath)
+      return {
+        ...encryptedBase,
+        markdown: plaintext,
+        isLocked: false,
+        encryptionMeta: {
+          pbkdf2Iterations: header.pbkdf2Iterations,
+          formatVersion: header.formatVersion
+        }
+      }
+    }
+
+    const header = await peekMdeHeader(resolvedPath)
+    return {
+      ...encryptedBase,
+      markdown: '',
+      isLocked: true,
+      encryptionMeta: {
+        pbkdf2Iterations: header.pbkdf2Iterations,
+        formatVersion: header.formatVersion
+      }
+    }
+  }
+
   // TODO: Use streams to not buffer the file multiple times and only guess
   //       encoding on the first 256/512 bytes.
 

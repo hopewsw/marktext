@@ -2,6 +2,7 @@ import {
   SEPARATOR,
   getNewFile,
   getNewDirectory,
+  getNewEncryptedFile,
   getCOPY,
   getCUT,
   getPASTE,
@@ -13,10 +14,12 @@ import { popupContextMenu, type ContextMenuItem } from '../popupMenu'
 
 export const showContextMenu = (
   event: { clientX: number; clientY: number },
-  hasPathCache: boolean
+  hasPathCache: boolean,
+  isDirectory = false
 ): void => {
   const contextItems: ContextMenuItem[] = [
     getNewFile(),
+    ...(isDirectory ? [getNewEncryptedFile()] : []),
     getNewDirectory(),
     SEPARATOR,
     getCOPY(),

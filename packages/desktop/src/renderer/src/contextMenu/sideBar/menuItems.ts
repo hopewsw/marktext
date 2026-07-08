@@ -24,6 +24,14 @@ export const getNewDirectory = () => ({
   }
 })
 
+export const getNewEncryptedFile = () => ({
+  label: t('contextMenu.sideBar.newEncryptedFile'),
+  id: 'newEncryptedFileMenuItem',
+  click(_menuItem: unknown, _browserWindow: unknown) {
+    contextMenu.newEncryptedFile()
+  }
+})
+
 export const getCOPY = () => ({
   label: t('contextMenu.sideBar.copy'),
   id: 'copyMenuItem',

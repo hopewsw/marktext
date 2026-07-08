@@ -5,6 +5,7 @@
   >
     <tabs v-show="showTabBar" />
     <div class="container">
+      <locked-overlay v-if="isLocked" />
       <editor
         :markdown="markdown"
         :cursor="cursor"
@@ -29,6 +30,7 @@ import Tabs from './tabs.vue'
 import Editor from './editor.vue'
 import SourceCode from './sourceCode.vue'
 import TabNotifications from './notifications.vue'
+import LockedOverlay from '../encryption/lockedOverlay.vue'
 
 defineProps<{
   markdown: string
@@ -41,6 +43,7 @@ defineProps<{
   showTabBar: boolean
   textDirection: string
   platform: string
+  isLocked?: boolean
 }>()
 
 const { effectiveSideBarWidth } = storeToRefs(useLayoutStore())
@@ -59,6 +62,7 @@ const { effectiveSideBarWidth } = storeToRefs(useLayoutStore())
   & > .container {
     flex: 1;
     overflow: hidden;
+    position: relative;
   }
 }
 </style>

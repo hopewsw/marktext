@@ -10,6 +10,7 @@
       "new": "New",
       "newTab": "New Tab",
       "newWindow": "New Window",
+      "newEncryptedTab": "New Encrypted Document",
       "open": "Open",
       "openFile": "Open File...",
       "openFolder": "Open Folder...",
@@ -17,6 +18,8 @@
       "clearRecentlyUsed": "Clear Recently Used",
       "save": "Save",
       "saveAs": "Save As...",
+      "lockDocument": "Lock Document",
+      "changePassword": "Change Password...",
       "autoSave": "Auto Save",
       "moveTo": "Move To",
       "rename": "Rename",
@@ -230,6 +233,7 @@
     "editDictionary": "Edit Dictionary...",
     "sideBar": {
       "newFile": "New File",
+      "newEncryptedFile": "New Encrypted File",
       "newDirectory": "New Directory",
       "copy": "Copy",
       "cut": "Cut",
@@ -483,7 +487,8 @@
       "spelling": "Spelling",
       "theme": "Theme",
       "image": "Image",
-      "keybindings": "Keybindings"
+      "keybindings": "Keybindings",
+      "security": "Security"
     },
     "general": {
       "title": "General",
@@ -865,6 +870,56 @@
         "unbind": "Unbind"
       }
     },
+    "security": {
+      "title": "Security",
+      "sessionNote": "Passwords are stored in memory for the current session only and are cleared when MarkText exits.",
+      "autoLock": {
+        "title": "Auto Lock",
+        "enable": "Lock encrypted documents after idle timeout",
+        "timeout": "Idle timeout",
+        "saveBeforeLock": "Save before locking",
+        "lockOnBlur": "Lock when window loses focus",
+        "lockOnTabClose": "Clear session key when closing encrypted tab"
+      },
+      "autoLockTimeout": {
+        "1min": "1 minute",
+        "5min": "5 minutes",
+        "15min": "15 minutes",
+        "30min": "30 minutes",
+        "60min": "60 minutes"
+      },
+      "clipboard": {
+        "title": "Clipboard",
+        "clearAfterCopy": "Clear clipboard after copying from encrypted documents",
+        "clearDelay": "Clipboard clear delay"
+      },
+      "clipboardClearDelay": {
+        "10s": "10 seconds",
+        "30s": "30 seconds",
+        "60s": "60 seconds",
+        "120s": "120 seconds"
+      },
+      "password": {
+        "title": "Password Policy",
+        "minimumStrength": "Minimum password strength for new encrypted documents",
+        "pbkdf2Iterations": "PBKDF2 iterations for newly created encrypted documents"
+      },
+      "passwordStrength": {
+        "basic": "Basic (8+ chars, letters and digits)",
+        "strong": "Strong (12+ chars, mixed case, digit, symbol)"
+      },
+      "pbkdf2Iterations": {
+        "100k": "100,000 (faster unlock)",
+        "300k": "300,000",
+        "600k": "600,000 (recommended)",
+        "1m": "1,000,000 (stronger, slower unlock)"
+      },
+      "storage": {
+        "title": "File Storage",
+        "keepBackup": "Keep .bak backup when saving encrypted documents",
+        "showLockIcon": "Show lock icon on encrypted document tabs"
+      }
+    },
     "selectFont": "Select Font",
     "spellchecker": {
       "autoDetectDescription": "Automatically detect document language",
@@ -1079,6 +1134,30 @@
   "notifications": {
     "defaultMessage": "Default message",
     "defaultTitle": "Notification"
+  },
+  "encryption": {
+    "unlockTitle": "Unlock Encrypted Document",
+    "setPasswordTitle": "Set Password",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "rememberSession": "Remember password for this session (cleared when MarkText exits)",
+    "unlock": "Unlock",
+    "setPassword": "Set Password",
+    "cancel": "Cancel",
+    "incorrectPassword": "Incorrect password",
+    "documentLocked": "Document is locked",
+    "weakPassword": "Password does not meet strength requirements",
+    "passwordMismatch": "Passwords do not match",
+    "dataLossWarning": "Password loss is permanent. MarkText cannot recover encrypted documents.",
+    "changePasswordTitle": "Change Password",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "changePasswordFailed": "Failed to change password. Check your current password.",
+    "createEncryptedFileTitle": "Create Encrypted File",
+    "createFile": "Create",
+    "restoreFromBackup": "Try restoring from backup (.bak)",
+    "restoreFailed": "Failed to restore from backup"
   },
   "store": {
     "editor": {

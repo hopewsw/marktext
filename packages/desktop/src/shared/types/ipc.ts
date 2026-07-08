@@ -32,6 +32,14 @@ import type {
 } from './files'
 import type { BufferedState as BufferedStateType } from './bufferedState'
 import type { MenuTemplate, MenuPopupPosition } from './menu'
+import type {
+  MdeUnlockRequest,
+  MdeUnlockResponse,
+  MdeChangePasswordRequest,
+  MdeCreateEmptyRequest,
+  MdeLockPayload,
+  MdePromptUnlockPayload
+} from './encryption'
 
 // =================================================================
 // Invoke channels (renderer → main, returns Promise<T>)
@@ -83,6 +91,13 @@ export interface IpcInvokeChannels {
   // Main derives the BrowserWindow via BrowserWindow.fromWebContents(e.sender);
   // no need to pass windowId. Payload is the editor+project+layout snapshot.
   'update-buffer-state': { args: [payload: unknown]; ret: void }
+  'mt::mde::unlock': { args: [req: MdeUnlockRequest]; ret: MdeUnlockResponse }
+  'mt::mde::change-password': { args: [req: MdeChangePasswordRequest]; ret: { ok: true } }
+  'mt::mde::create-empty': { args: [req: MdeCreateEmptyRequest]; ret: { ok: true } }
+  'mt::mde::has-session-key': { args: [pathname: string]; ret: boolean }
+  'mt::mde::is-encrypted-file': { args: [pathname: string]; ret: boolean }
+  'mt::mde::has-backup': { args: [pathname: string]; ret: boolean }
+  'mt::mde::restore-from-backup': { args: [pathname: string]; ret: { ok: true } }
 }
 
 // =================================================================
@@ -118,6 +133,7 @@ export interface IpcSendChannels {
   'mt::cmd-open-file': []
   'mt::cmd-open-folder': []
   'mt::cmd-toggle-autosave': []
+  'mt::mde::lock': [payload: MdeLockPayload]
   'mt::editor-selection-changed': [windowId: number, state: unknown]
   'mt::format-link-click': [payload: { data: unknown; dirname: string }]
   'mt::get-current-language': []
@@ -170,6 +186,10 @@ export interface IpcSendChannels {
   'mt::shell::show-item': [fullPath: string]
   'mt::update-format-menu': [windowId: number, state: Record<string, boolean>]
   'mt::update-line-ending-menu': [windowId: number, lineEnding: LineEnding]
+  'mt::update-encryption-menu': [
+    windowId: number,
+    state: { lockEnabled: boolean; changePasswordEnabled: boolean }
+  ]
   'mt::update-sidebar-menu': [windowId: number, visible: boolean]
   'mt::view-layout-changed': [windowId: number, layout: unknown]
   'mt::win::close': []
@@ -242,9 +262,15 @@ export interface IpcMainEventChannels {
   'mt::invalidate-image-cache': []
   'mt::keybindings-response': [bindings: unknown]
   'mt::load-state': [state: BufferedStateType]
+  'mt::mde::prompt-unlock': [payload: MdePromptUnlockPayload]
+  'mt::mde::document-locked': [payload: MdeLockPayload]
+  'mt::mde::unlock-failed': [payload: { tabId: string; code: string }]
   'mt::menu::click': [menuId: string]
   'mt::menu::closed': []
   'mt::new-untitled-tab': [selected?: boolean, markdown?: string]
+  'mt::new-encrypted-tab': []
+  'mt::editor-lock-document': []
+  'mt::editor-change-password': []
   'mt::open-directory': [directoryPath: string]
   'mt::open-new-tab': [
     markdownDocument: MarkdownDocument | null,

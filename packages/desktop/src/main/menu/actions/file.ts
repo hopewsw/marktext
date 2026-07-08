@@ -7,11 +7,12 @@ import {
   shell,
   ipcMain,
   type IpcMainEvent,
-  type MenuItem
+  type MenuItem,
+  type Menu
 } from 'electron'
 import log from 'electron-log'
 import { isDirectory, isFile, exists } from 'common/filesystem'
-import { MARKDOWN_EXTENSIONS, isMarkdownFile } from 'common/filesystem/paths'
+import { MARKDOWN_EXTENSIONS, ENCRYPTED_MARKDOWN_EXTENSIONS, isOpenableDocumentFile, hasEncryptedMarkdownExtension } from 'common/filesystem/paths'
 import { checkUpdates, userSetting } from './marktext'
 import { showTabBar } from './view'
 import { COMMANDS } from '../../commands'
@@ -19,6 +20,7 @@ import type { CommandManager } from '../../commands'
 import { EXTENSION_HASN, PANDOC_EXTENSIONS, URL_REG } from '../../config'
 import { normalizeAndResolvePath, writeFile } from '../../filesystem'
 import { writeMarkdownFile } from '../../filesystem/markdown'
+import { writeMdeFile, storeSessionAfterWrite } from '../../filesystem/mde'
 import { getPath, getRecommendTitleFromMarkdownString } from '../../utils'
 import pandoc from '../../utils/pandoc'
 import { t } from '../../i18n'
@@ -172,8 +174,9 @@ const handleResponseForSave = async(
   let filePath = pathname
 
   if (!filePath) {
+    const defaultExt = options.isEncrypted ? '.mde' : '.md'
     const { filePath: dialogPath, canceled } = await dialog.showSaveDialog(win, {
-      defaultPath: path.join(defaultPath || getPath('documents'), `${recommendFilename}.md`)
+      defaultPath: path.join(defaultPath || getPath('documents'), `${recommendFilename}${defaultExt}`)
     })
 
     if (dialogPath && !canceled) {
@@ -187,15 +190,10 @@ const handleResponseForSave = async(
   }
 
   filePath = path.resolve(filePath)
-  const extension = path.extname(filePath) || '.md'
+  const extension = path.extname(filePath) || (options.isEncrypted ? '.mde' : '.md')
   filePath = !filePath.endsWith(extension) ? (filePath += extension) : filePath
-  // The original JS passed `win` here; writeMarkdownFile only takes 3 args
-  // (the 4th was silently ignored). Drop it explicitly under strict mode.
-  // The IPC `SaveOptions` has every field optional, but writeMarkdownFile
-  // requires the strict `MarkdownDocumentOptions` shape — the renderer always
-  // populates every field for the unsaved-file dialog payload, so the cast
-  // is safe at this seam.
-  return writeMarkdownFile(filePath, markdown, options as Parameters<typeof writeMarkdownFile>[2])
+
+  return writeDocumentToPath(filePath, markdown, options)
     .then(() => {
       if (!alreadyExistOnDisk) {
         ipcMain.emit('window-add-file-path', win.id, filePath)
@@ -270,6 +268,29 @@ const openPandocFile = async(windowId: number, pathname: string): Promise<void> 
 const removePrintServiceFromWindow = (win: BrowserWindow): void => {
   // remove print service content and restore GUI
   win.webContents.send('mt::print-service-clearup')
+}
+
+const writeDocumentToPath = async(
+  filePath: string,
+  markdown: string,
+  options: UnsavedFile['options']
+): Promise<void> => {
+  const isMde = !!options.isEncrypted || hasEncryptedMarkdownExtension(filePath)
+  if (isMde) {
+    await writeMdeFile({
+      pathname: filePath,
+      plaintext: markdown,
+      useSessionKey: !!options.useSessionKey,
+      password: options.encryptionPassword,
+      options: { keepBackup: options.encryptionKeepBackup ?? true, pbkdf2Iterations: options.encryptionPbkdf2Iterations }
+    })
+    if (options.encryptionPassword) {
+      await storeSessionAfterWrite(filePath, options.encryptionPassword, false)
+    }
+    return
+  }
+
+  await writeMarkdownFile(filePath, markdown, options as Parameters<typeof writeMarkdownFile>[2])
 }
 
 // --- events -----------------------------------
@@ -355,12 +376,18 @@ ipcMain.on(
 
     let { filePath, canceled } = await dialog.showSaveDialog(win, {
       defaultPath:
-        pathname || path.join(defaultPath || getPath('documents'), `${recommendFilename}.md`)
+        pathname ||
+        path.join(
+          defaultPath || getPath('documents'),
+          `${recommendFilename}${options.isEncrypted ? '.mde' : '.md'}`
+        )
     })
 
     if (filePath && !canceled) {
       filePath = path.resolve(filePath)
-      writeMarkdownFile(filePath, markdown, options as Parameters<typeof writeMarkdownFile>[2])
+      const extension = path.extname(filePath) || (options.isEncrypted ? '.mde' : '.md')
+      filePath = !filePath.endsWith(extension) ? (filePath += extension) : filePath
+      writeDocumentToPath(filePath, markdown, options)
         .then(() => {
           if (!alreadyExistOnDisk) {
             ipcMain.emit('window-add-file-path', win.id, filePath)
@@ -459,7 +486,7 @@ ipcMain.on('mt::window::drop', async(e, fileList: string[]) => {
     return
   }
   for (const file of fileList) {
-    if (isMarkdownFile(file)) {
+    if (isOpenableDocumentFile(file)) {
       openFileOrFolder(win, file)
       continue
     }
@@ -615,7 +642,7 @@ ipcMain.on('mt::format-link-click', (e, { data, dirname }: FormatLinkPayload) =>
   if (pathname) {
     // decodeURIComponent() CommonMark #503, allow percent encoded path names to open files. https://github.com/marktext/marktext/issues/57
     pathname = path.normalize(decodeURIComponent(pathname))
-    if (isMarkdownFile(pathname)) {
+    if (isOpenableDocumentFile(pathname)) {
       const innerWin = BrowserWindow.fromWebContents(e.sender)
       if (innerWin) {
         openFileOrFolder(innerWin, pathname)
@@ -705,7 +732,7 @@ export const openFile = async(win: BrowserWindow | null): Promise<void> => {
     filters: [
       {
         name: 'Markdown document',
-        extensions: [...MARKDOWN_EXTENSIONS]
+        extensions: [...MARKDOWN_EXTENSIONS, ...ENCRYPTED_MARKDOWN_EXTENSIONS]
       }
     ]
   })
@@ -772,6 +799,34 @@ export const saveAs = (win: Win): void => {
   if (win && win.webContents) {
     win.webContents.send('mt::editor-ask-file-save-as')
   }
+}
+
+export const newEncryptedTab = (win: Win): void => {
+  if (win?.webContents) {
+    win.webContents.send('mt::new-encrypted-tab')
+  }
+}
+
+export const lockDocument = (win: Win): void => {
+  if (win?.webContents) {
+    win.webContents.send('mt::editor-lock-document')
+  }
+}
+
+export const changePassword = (win: Win): void => {
+  if (win?.webContents) {
+    win.webContents.send('mt::editor-change-password')
+  }
+}
+
+export const encryptionMenuChanged = (
+  applicationMenu: Menu,
+  state: { lockEnabled: boolean; changePasswordEnabled: boolean }
+): void => {
+  const lockItem = applicationMenu.getMenuItemById('lockDocumentMenuItem')
+  const changeItem = applicationMenu.getMenuItemById('changePasswordMenuItem')
+  if (lockItem) lockItem.enabled = state.lockEnabled
+  if (changeItem) changeItem.enabled = state.changePasswordEnabled
 }
 
 export const exportPDF = (win: Win): void => {

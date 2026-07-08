@@ -5,7 +5,8 @@ import {
   Brush as ThemeIcon,
   Picture as ImageIcon,
   Reading as SpellIcon,
-  Operation as KeyBindingIcon
+  Operation as   KeyBindingIcon,
+  Lock as SecurityIcon
 } from '@element-plus/icons-vue'
 
 import preferences from '../../../../main/preferences/schema.json'
@@ -107,6 +108,12 @@ export const getCategory = (): PrefCategory[] => [
     label: 'keybindings',
     icon: KeyBindingIcon,
     path: '/preference/keybindings'
+  },
+  {
+    name: t('preferences.categories.security'),
+    label: 'security',
+    icon: SecurityIcon,
+    path: '/preference/security'
   }
 ]
 
@@ -149,6 +156,7 @@ export const getTranslatedSearchContent: CachedTranslator = (() => {
       else if (categoryName === 'Searcher') mappedCategory = 'searcher'
       else if (categoryName === 'Watcher') mappedCategory = 'watcher'
       else if (categoryName === 'Spelling') mappedCategory = 'spelling'
+      else if (categoryName === 'Security') mappedCategory = 'security'
       else if (categoryName === 'Custom CSS') mappedCategory = 'custom css'
       else {
         // Handle special category names
@@ -164,7 +172,8 @@ export const getTranslatedSearchContent: CachedTranslator = (() => {
         'spelling',
         'theme',
         'image',
-        'keybindings'
+        'keybindings',
+        'security'
       ]
       if (!validRoutes.includes(routeCategory)) routeCategory = 'general'
 

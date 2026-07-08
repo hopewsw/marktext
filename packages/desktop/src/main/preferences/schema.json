@@ -401,5 +401,63 @@
     "description": "Watcher--Whether to use polling. Polling may leads to high CPU utilization but is necessary to watch files over a network.--internal",
     "type": "boolean",
     "default": false
+  },
+  "encryptionAutoLock": {
+    "description": "Security--Lock encrypted documents after idle timeout.",
+    "type": "boolean",
+    "default": true
+  },
+  "encryptionAutoLockTimeout": {
+    "description": "Security--Idle timeout in ms before locking encrypted documents.",
+    "type": "number",
+    "minimum": 60000,
+    "default": 300000
+  },
+  "encryptionAutoSaveBeforeLock": {
+    "description": "Security--Save encrypted documents before auto-lock.",
+    "type": "boolean",
+    "default": true
+  },
+  "encryptionLockOnBlur": {
+    "description": "Security--Lock encrypted documents when the window loses focus.",
+    "type": "boolean",
+    "default": false
+  },
+  "encryptionLockOnTabClose": {
+    "description": "Security--Clear session key when closing an encrypted tab.",
+    "type": "boolean",
+    "default": true
+  },
+  "encryptionClearClipboardAfterCopy": {
+    "description": "Security--Clear clipboard after copying from encrypted documents.",
+    "type": "boolean",
+    "default": false
+  },
+  "encryptionClipboardClearDelay": {
+    "description": "Security--Delay in ms before clearing clipboard.",
+    "type": "number",
+    "minimum": 10000,
+    "default": 60000
+  },
+  "encryptionPasswordStrength": {
+    "description": "Security--Minimum password strength for new encrypted documents.",
+    "enum": ["basic", "strong"],
+    "default": "basic"
+  },
+  "encryptionKeepBackup": {
+    "description": "Security--Keep a .bak file when saving encrypted documents.",
+    "type": "boolean",
+    "default": true
+  },
+  "encryptionPbkdf2Iterations": {
+    "description": "Security--PBKDF2 iterations for newly created encrypted documents.",
+    "type": "number",
+    "minimum": 100000,
+    "default": 600000
+  },
+  "encryptionShowLockIcon": {
+    "description": "Security--Show lock icon for encrypted document tabs.",
+    "type": "boolean",
+    "default": true
   }
 }

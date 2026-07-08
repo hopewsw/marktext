@@ -1339,8 +1339,8 @@ const setMarkdownToEditor = (payload: unknown) => {
     if (id) {
       resetSyntheticHistory(id, editor.value.getMarkdown())
     }
-    if (newCursor) {
-      editor.value.setCursor(newCursor)
+    if (newCursor && (newMarkdown ?? '').length > 0) {
+      safeSetCursor(newCursor)
     }
   }
 }
@@ -1372,6 +1372,27 @@ const isIndexCursor = (
   return !!c && isIndexPosition(c.anchor) && isIndexPosition(c.focus)
 }
 
+const safeSetCursor = (cursor: unknown): void => {
+  if (!editor.value || !cursor) return
+  try {
+    editor.value.setCursor(cursor)
+  } catch (err) {
+    console.warn('Failed to restore cursor after file change:', err)
+  }
+}
+
+const safeSetCursorByOffset = (muyaIndexCursor: unknown): void => {
+  if (!editor.value || !isIndexCursor(muyaIndexCursor)) return
+  try {
+    editor.value.setCursorByOffset(muyaIndexCursor)
+  } catch (err) {
+    console.warn('Failed to restore cursor by offset after file change:', err)
+  }
+}
+
+const canRestoreCursor = (markdown: string | undefined, renderCursor: boolean | undefined): boolean =>
+  renderCursor !== false && typeof markdown === 'string' && markdown.length > 0
+
 // listen for markdown change form source mode or change tabs etc
 const handleFileChange = (payload: unknown) => {
   const {
@@ -1380,7 +1401,8 @@ const handleFileChange = (payload: unknown) => {
     cursor: newCursor,
     muyaIndexCursor,
     history: payloadHistory,
-    scrollTop
+    scrollTop,
+    renderCursor
   } = (payload ?? {}) as FileChangePayload
   if (!editor.value) return
   const container = getScrollContainer()
@@ -1415,7 +1437,9 @@ const handleFileChange = (payload: unknown) => {
       editor.value.replaceContent(newMarkdown)
       // Map the CodeMirror `{ line, ch }` cursor onto a block-key cursor so the
       // WYSIWYG caret lands where the source-mode cursor was (PG2).
-      editor.value.setCursorByOffset(muyaIndexCursor)
+      if (canRestoreCursor(newMarkdown, renderCursor)) {
+        safeSetCursorByOffset(muyaIndexCursor)
+      }
     } else {
       // Tab switch / programmatic content swap: `setContent` replaces the
       // document and clears history, so restore the real engine history (kept
@@ -1423,22 +1447,24 @@ const handleFileChange = (payload: unknown) => {
       // `history` in the payload is the synthetic desktop-shaped history used
       // for save tracking, not the engine history.
       editor.value.setContent(newMarkdown)
-      if (newCursor) {
-        editor.value.setCursor(newCursor)
-      } else if (isIndexCursor(muyaIndexCursor)) {
-        // Source-mode handoff for a tab the engine has no history for (e.g.
-        // first interaction after load): fall back to a caret-only remap. The
-        // engine runs its own setContent dance internally, so restore the
-        // history after.
-        editor.value.setCursorByOffset(muyaIndexCursor)
+      if (canRestoreCursor(newMarkdown, renderCursor)) {
+        if (newCursor) {
+          safeSetCursor(newCursor)
+        } else if (isIndexCursor(muyaIndexCursor)) {
+          // Source-mode handoff for a tab the engine has no history for (e.g.
+          // first interaction after load): fall back to a caret-only remap. The
+          // engine runs its own setContent dance internally, so restore the
+          // history after.
+          safeSetCursorByOffset(muyaIndexCursor)
+        }
       }
       const savedEngineHistory = id ? engineHistoryByTab.get(id) : undefined
       if (savedEngineHistory) {
         editor.value.setHistory(savedEngineHistory)
       }
     }
-  } else if (newCursor) {
-    editor.value.setCursor(newCursor)
+  } else if (newCursor && renderCursor !== false) {
+    safeSetCursor(newCursor)
   }
 
   if (typeof scrollTop === 'number') {

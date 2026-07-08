@@ -16,6 +16,7 @@ import {
   TrailingNewlineCommand
 } from '../commands'
 import { defineStore } from 'pinia'
+import { toRaw } from 'vue'
 import { usePreferencesStore } from './preferences'
 import { useProjectStore } from './project'
 import { useLayoutStore } from './layout'
@@ -191,6 +192,24 @@ export const useEditorStore = defineStore('editor', {
       this.updateTabIdToIndex()
       window.DIRNAME = currentFile?.pathname ? window.path.dirname(currentFile.pathname) : ''
       this.UPDATE_LINE_ENDING_MENU()
+
+      for (const tab of tabs) {
+        if (tab.isEncrypted) {
+          tab.sessionKeyActive = false
+          if (tab.isLocked || !tab.markdown) {
+            tab.isLocked = true
+            tab.markdown = ''
+          }
+        }
+      }
+
+      if (currentFile?.isEncrypted && currentFile.isLocked && currentFile.pathname) {
+        bus.emit('mde::show-unlock', {
+          tabId: currentFile.id,
+          pathname: currentFile.pathname,
+          filename: currentFile.filename
+        })
+      }
 
       for (const warning of bufferedEditorState.restoreWarnings) {
         const restoredTabId = warning.tabId ? oldIdToNewId[warning.tabId] : null
@@ -476,23 +495,77 @@ export const useEditorStore = defineStore('editor', {
       }
     },
 
+    UPDATE_ENCRYPTION_MENU(): void {
+      const tab = this.currentFile
+      const enabled = !!(tab?.isEncrypted && !tab.isLocked && tab.pathname)
+      const { windowId } = window.marktext?.env ?? { windowId: -1 }
+      window.electron.ipcRenderer.send('mt::update-encryption-menu', windowId, {
+        lockEnabled: enabled,
+        changePasswordEnabled: enabled
+      })
+    },
+
     FILE_SAVE(): void {
       if (!this.currentFile) return
+      const file = this.currentFile
+      if (file.isEncrypted && file.isLocked) return
+
       const projectStore = useProjectStore()
-      const { id, filename, pathname, markdown } = this.currentFile
-      const options = getOptionsFromState(this.currentFile)
+      const { id, filename, pathname, markdown } = file
+      const options = getOptionsFromState(file)
       const defaultPath = getRootFolderFromState(projectStore)
-      if (id) {
-        window.electron.ipcRenderer.send(
-          'mt::response-file-save',
+      if (!id) return
+
+      if (file.isEncrypted && !file.sessionKeyActive) {
+        bus.emit('mde::prompt-save-password', {
           id,
           filename,
           pathname,
           markdown,
-          deepClone(options),
+          options: deepClone(options),
           defaultPath
-        )
+        })
+        return
       }
+
+      this.SEND_FILE_SAVE({
+        id,
+        filename,
+        pathname,
+        markdown,
+        options: {
+          ...options,
+          encryptionKeepBackup: usePreferencesStore().encryptionKeepBackup,
+          encryptionPbkdf2Iterations: usePreferencesStore().encryptionPbkdf2Iterations
+        },
+        defaultPath
+      })
+    },
+
+    SEND_FILE_SAVE({
+      id,
+      filename,
+      pathname,
+      markdown,
+      options,
+      defaultPath
+    }: {
+      id: string
+      filename: string
+      pathname: string
+      markdown: string
+      options: ReturnType<typeof getOptionsFromState>
+      defaultPath: string
+    }): void {
+      window.electron.ipcRenderer.send(
+        'mt::response-file-save',
+        id,
+        filename,
+        pathname,
+        markdown,
+        deepClone(options),
+        defaultPath
+      )
     },
 
     // need pass some data to main process when `save` menu item clicked
@@ -508,8 +581,11 @@ export const useEditorStore = defineStore('editor', {
     FILE_SAVE_AS(): void {
       if (!this.currentFile) return
       const projectStore = useProjectStore()
-      const { id, filename, pathname, markdown } = this.currentFile
+      const { id, filename, pathname, markdown, isEncrypted } = this.currentFile
       const options = getOptionsFromState(this.currentFile)
+      if (isEncrypted) {
+        options.isEncrypted = true
+      }
       const defaultPath = getRootFolderFromState(projectStore)
 
       if (id) {
@@ -561,6 +637,10 @@ export const useEditorStore = defineStore('editor', {
         }
         if (tab) {
           Object.assign(tab, { filename, pathname, isSaved: true })
+          if (pathname.endsWith('.mde')) {
+            tab.isEncrypted = true
+            tab.sessionKeyActive = true
+          }
           debouncedSendBufferedState()
         }
       })
@@ -807,6 +887,7 @@ export const useEditorStore = defineStore('editor', {
       }
 
       this.UPDATE_LINE_ENDING_MENU()
+      this.UPDATE_ENCRYPTION_MENU()
       if (didUpdateCurrentFile) {
         debouncedSendBufferedState()
       }
@@ -900,11 +981,105 @@ export const useEditorStore = defineStore('editor', {
           this.NEW_UNTITLED_TAB({ markdown, selected })
         }
       )
+      window.electron.ipcRenderer.on('mt::new-encrypted-tab', () => {
+        this.NEW_ENCRYPTED_TAB()
+      })
+      window.electron.ipcRenderer.on('mt::editor-lock-document', () => {
+        if (this.currentFile?.isEncrypted && !this.currentFile.isLocked) {
+          this.LOCK_TAB(this.currentFile.id)
+        }
+      })
+      window.electron.ipcRenderer.on('mt::editor-change-password', () => {
+        const tab = this.currentFile
+        if (!tab?.isEncrypted || tab.isLocked || !tab.pathname) return
+        bus.emit('mde::show-change-password', {
+          tabId: tab.id,
+          pathname: tab.pathname,
+          filename: tab.filename
+        })
+      })
       bus.on('mt::new-untitled-tab', (payload) => {
         const { selected = true, markdown = '' } =
           (payload as { selected?: boolean; markdown?: string } | undefined) ?? {}
         this.NEW_UNTITLED_TAB({ markdown, selected })
       })
+    },
+
+    LISTEN_FOR_MDE(): void {
+      window.mdeUtils.onPromptUnlock((payload) => {
+        bus.emit('mde::show-unlock', payload)
+      })
+    },
+
+    async UNLOCK_TAB(tabId: string, password: string, remember: boolean): Promise<boolean> {
+      const tab = this.tabs.find((t) => t.id === tabId)
+      if (!tab?.pathname) return false
+
+      try {
+        const { markdown } = await window.mdeUtils.unlock({
+          pathname: tab.pathname,
+          password,
+          rememberSession: remember
+        })
+        tab.markdown = markdown
+        tab.isLocked = false
+        tab.isEncrypted = true
+        tab.rememberSession = remember
+        tab.sessionKeyActive = true
+
+        if (this.currentFile?.id === tabId) {
+          bus.emit('file-loaded', { id: tabId, markdown, cursor: tab.cursor })
+        }
+        debouncedSendBufferedState()
+        this.UPDATE_ENCRYPTION_MENU()
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    LOCK_TAB(tabId: string): void {
+      const tab = this.tabs.find((t) => t.id === tabId)
+      if (!tab?.isEncrypted || tab.isLocked) return
+
+      if (tab.pathname) {
+        window.mdeUtils.lock({ tabId, pathname: tab.pathname })
+      }
+
+      tab.markdown = ''
+      tab.isLocked = true
+      tab.sessionKeyActive = false
+      tab.rememberSession = false
+      tab.cursor = null
+      tab.muyaIndexCursor = null
+
+      if (this.currentFile?.id === tabId) {
+        bus.emit('file-changed', {
+          id: tabId,
+          markdown: '',
+          renderCursor: false
+        })
+      }
+
+      debouncedSendBufferedState()
+      this.UPDATE_ENCRYPTION_MENU()
+    },
+
+    NEW_ENCRYPTED_TAB(): void {
+      this.SHOW_TAB_VIEW(false)
+      const preferencesStore = usePreferencesStore()
+      const { defaultEncoding, endOfLine } = preferencesStore
+      const fileState = getBlankFileState(this.tabs, defaultEncoding, endOfLine, '')
+      fileState.isEncrypted = true
+      fileState.isLocked = false
+      fileState.sessionKeyActive = false
+      fileState.filename = fileState.filename.replace(/^Untitled/, 'Encrypted')
+
+      const { id, markdown } = fileState
+      this.UPDATE_CURRENT_FILE(fileState)
+      bus.emit('file-loaded', { id, markdown })
+      debouncedSendBufferedState()
+      this.UPDATE_ENCRYPTION_MENU()
     },
 
     CLOSE_TAB(file: IFileState | null = null): void {
@@ -996,6 +1171,12 @@ export const useEditorStore = defineStore('editor', {
       }
 
       const { pathname } = file
+      if (pathname && file.isEncrypted) {
+        const prefs = usePreferencesStore()
+        if (prefs.encryptionLockOnTabClose) {
+          window.mdeUtils.lock({ tabId: file.id, pathname })
+        }
+      }
       if (pathname) {
         window.electron.ipcRenderer.send('mt::window-tab-closed', pathname)
       }
@@ -1266,7 +1447,7 @@ export const useEditorStore = defineStore('editor', {
         this.SHOW_TAB_VIEW(false)
       }
 
-      const { markdown, isMixedLineEndings } = markdownDocument
+      const { markdown, isMixedLineEndings, isLocked } = markdownDocument
       const docState = createDocumentState(
         Object.assign(
           {},
@@ -1275,6 +1456,26 @@ export const useEditorStore = defineStore('editor', {
         )
       )
       const { id, cursor } = docState
+
+      if (isLocked) {
+        docState.isEncrypted = true
+        docState.isLocked = true
+        docState.sessionKeyActive = false
+        docState.markdown = ''
+        if (selected) {
+          this.UPDATE_CURRENT_FILE(docState)
+        } else {
+          this.tabs.push(docState)
+        }
+        this.updateTabIdToIndex()
+        debouncedSendBufferedState()
+        bus.emit('mde::show-unlock', {
+          tabId: id,
+          pathname: docState.pathname,
+          filename: docState.filename
+        })
+        return
+      }
 
       if (selected) {
         this.UPDATE_CURRENT_FILE(docState)
@@ -1385,7 +1586,7 @@ export const useEditorStore = defineStore('editor', {
           tab.lastSavedHistoryId !== tab.history.lastInitIndex) // Edge Case: Undo to original content (lastEditIndex === -1) after saving means we cant use the lastEditIndex. Compare it against the lastInitIndex instead.
       ) {
         tab.isSaved = false
-        if (pathname && autoSave) {
+        if (pathname && autoSave && !tab.isLocked && !(tab.isEncrypted && !tab.sessionKeyActive)) {
           const options = getOptionsFromState(tab)
           this.HANDLE_AUTO_SAVE({
             id,
@@ -1897,7 +2098,7 @@ function toSerializableValue<T>(value: T | null | undefined, fallback: T | null 
   if (value == null) return fallback
 
   try {
-    return deepClone(value) as T
+    return deepClone(toRaw(value as object)) as T
   } catch (err) {
     console.warn('Unable to serialize editor buffer value:', err)
     return fallback
@@ -1908,8 +2109,11 @@ interface BufferedTabState {
   id: string
   pathname: string
   filename: string
-  markdown: string
+  markdown?: string
   isSaved: boolean
+  isEncrypted?: boolean
+  isLocked?: boolean
+  encryptionMeta?: IFileState['encryptionMeta']
   encoding: IFileState['encoding']
   lineEnding: IFileState['lineEnding']
   trimTrailingNewline: number
@@ -1921,23 +2125,45 @@ interface BufferedTabState {
 }
 
 const createBufferedTabState = (tab: Partial<IFileState> & { id: string }): BufferedTabState => {
+  const raw = toRaw(tab) as Partial<IFileState> & { id: string }
+
+  if (raw.isEncrypted) {
+    return {
+      id: raw.id,
+      pathname: raw.pathname ?? defaultFileState.pathname,
+      filename: raw.filename ?? defaultFileState.filename,
+      isSaved: raw.isSaved ?? defaultFileState.isSaved,
+      isEncrypted: true,
+      isLocked: raw.isLocked ?? true,
+      encryptionMeta: toSerializableValue(raw.encryptionMeta, null) ?? undefined,
+      encoding: defaultFileState.encoding,
+      lineEnding: defaultFileState.lineEnding,
+      trimTrailingNewline: defaultFileState.trimTrailingNewline,
+      adjustLineEndingOnSave: defaultFileState.adjustLineEndingOnSave,
+      cursor: null,
+      wordCount: defaultFileState.wordCount,
+      muyaIndexCursor: null,
+      scrollTop: 0
+    }
+  }
+
   return {
-    id: tab.id,
-    pathname: tab.pathname ?? defaultFileState.pathname,
-    filename: tab.filename ?? defaultFileState.filename,
-    markdown: typeof tab.markdown === 'string' ? tab.markdown : defaultFileState.markdown,
-    isSaved: tab.isSaved ?? defaultFileState.isSaved,
-    encoding: toSerializableValue(tab.encoding, defaultFileState.encoding),
-    lineEnding: tab.lineEnding ?? defaultFileState.lineEnding,
+    id: raw.id,
+    pathname: raw.pathname ?? defaultFileState.pathname,
+    filename: raw.filename ?? defaultFileState.filename,
+    markdown: typeof raw.markdown === 'string' ? raw.markdown : defaultFileState.markdown,
+    isSaved: raw.isSaved ?? defaultFileState.isSaved,
+    encoding: toSerializableValue(raw.encoding, defaultFileState.encoding)!,
+    lineEnding: raw.lineEnding ?? defaultFileState.lineEnding,
     trimTrailingNewline:
-      typeof tab.trimTrailingNewline === 'number'
-        ? tab.trimTrailingNewline
+      typeof raw.trimTrailingNewline === 'number'
+        ? raw.trimTrailingNewline
         : defaultFileState.trimTrailingNewline,
-    adjustLineEndingOnSave: tab.adjustLineEndingOnSave ?? defaultFileState.adjustLineEndingOnSave,
-    cursor: toSerializableValue(tab.cursor, defaultFileState.cursor),
-    wordCount: toSerializableValue(tab.wordCount, defaultFileState.wordCount),
-    muyaIndexCursor: toSerializableValue(tab.muyaIndexCursor, defaultFileState.muyaIndexCursor),
-    scrollTop: tab.scrollTop ?? defaultFileState.scrollTop
+    adjustLineEndingOnSave: raw.adjustLineEndingOnSave ?? defaultFileState.adjustLineEndingOnSave,
+    cursor: toSerializableValue(raw.cursor, defaultFileState.cursor),
+    wordCount: toSerializableValue(raw.wordCount, defaultFileState.wordCount)!,
+    muyaIndexCursor: toSerializableValue(raw.muyaIndexCursor, defaultFileState.muyaIndexCursor),
+    scrollTop: raw.scrollTop ?? defaultFileState.scrollTop
   }
 }
 

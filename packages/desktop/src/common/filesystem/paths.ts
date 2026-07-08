@@ -23,6 +23,12 @@ export const MARKDOWN_INCLUSIONS: readonly string[] = Object.freeze(
   MARKDOWN_EXTENSIONS.map((x) => '*.' + x)
 )
 
+export const ENCRYPTED_MARKDOWN_EXTENSIONS: readonly string[] = Object.freeze(['mde'])
+
+export const ENCRYPTED_MARKDOWN_INCLUSIONS: readonly string[] = Object.freeze(
+  ENCRYPTED_MARKDOWN_EXTENSIONS.map((x) => '*.' + x)
+)
+
 export const IMAGE_EXTENSIONS: readonly string[] = Object.freeze([
   'jpeg',
   'jpg',
@@ -38,6 +44,35 @@ export const IMAGE_EXTENSIONS: readonly string[] = Object.freeze([
 export const hasMarkdownExtension = (filename: string): boolean => {
   if (!filename || typeof filename !== 'string') return false
   return MARKDOWN_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(`.${ext}`))
+}
+
+export const hasEncryptedMarkdownExtension = (filename: string): boolean => {
+  if (!filename || typeof filename !== 'string') return false
+  return ENCRYPTED_MARKDOWN_EXTENSIONS.some((ext) =>
+    filename.toLowerCase().endsWith(`.${ext}`)
+  )
+}
+
+/** True for sidebar/editor openable document extensions (.md, .mde, …). */
+export const hasOpenableDocumentExtension = (filename: string): boolean => {
+  return hasMarkdownExtension(filename) || hasEncryptedMarkdownExtension(filename)
+}
+
+/**
+ * Returns true if the path is an encrypted markdown file or symlink to one.
+ */
+export const isEncryptedMarkdownFile = (filepath: string): boolean => {
+  if (!isFile2(filepath)) return false
+
+  if (isSymbolicLink(filepath)) {
+    const targetPath = path.resolve(path.dirname(filepath), fs.readlinkSync(filepath))
+    return isFile(targetPath) && hasEncryptedMarkdownExtension(targetPath)
+  }
+  return hasEncryptedMarkdownExtension(filepath)
+}
+
+export const isOpenableDocumentFile = (filepath: string): boolean => {
+  return isMarkdownFile(filepath) || isEncryptedMarkdownFile(filepath)
 }
 
 /**

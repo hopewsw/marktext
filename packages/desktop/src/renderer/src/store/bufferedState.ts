@@ -41,17 +41,31 @@ export const createBufferedState = (): Record<string, any> | null => {
   }
 }
 
-export const sendBufferedState = (): Promise<unknown> => {
-  const snapshot = createBufferedState()
-  if (snapshot) {
-    return window.electron.ipcRenderer.invoke('update-buffer-state', snapshot)
+/** Strip Vue proxies and non-cloneable values before IPC structured clone. */
+const serializeBufferedSnapshot = (snapshot: Record<string, unknown>): Record<string, unknown> | null => {
+  try {
+    return JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>
+  } catch (err) {
+    console.warn('Failed to serialize buffered state for IPC:', err)
+    return null
   }
+}
 
-  return Promise.resolve(false)
+export const sendBufferedState = (): Promise<unknown> => {
+  try {
+    const snapshot = createBufferedState()
+    if (!snapshot) return Promise.resolve(false)
+
+    const serializable = serializeBufferedSnapshot(snapshot)
+    if (!serializable) return Promise.resolve(false)
+
+    return window.electron.ipcRenderer.invoke('update-buffer-state', serializable)
+  } catch (err) {
+    console.error('Failed to update buffered state', err)
+    return Promise.resolve(false)
+  }
 }
 
 export const debouncedSendBufferedState = debounce(() => {
-  sendBufferedState().catch((err) => {
-    console.error('Failed to update buffered state', err)
-  })
+  void sendBufferedState()
 }, BUFFERED_STATE_DEBOUNCE_MS)

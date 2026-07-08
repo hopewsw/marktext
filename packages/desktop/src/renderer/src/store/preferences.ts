@@ -108,6 +108,18 @@ export interface PreferencesState {
 
   watcherUsePolling: boolean
 
+  encryptionAutoLock: boolean
+  encryptionAutoLockTimeout: number
+  encryptionAutoSaveBeforeLock: boolean
+  encryptionLockOnBlur: boolean
+  encryptionLockOnTabClose: boolean
+  encryptionClearClipboardAfterCopy: boolean
+  encryptionClipboardClearDelay: number
+  encryptionPasswordStrength: 'basic' | 'strong' | string
+  encryptionKeepBackup: boolean
+  encryptionPbkdf2Iterations: number
+  encryptionShowLockIcon: boolean
+
   // ----- Edit modes (per-window, not persisted) -----
   typewriter: boolean
   focus: boolean
@@ -219,6 +231,18 @@ export const usePreferencesStore = defineStore('preferences', {
     searchFollowSymlinks: true,
 
     watcherUsePolling: false,
+
+    encryptionAutoLock: true,
+    encryptionAutoLockTimeout: 300000,
+    encryptionAutoSaveBeforeLock: true,
+    encryptionLockOnBlur: false,
+    encryptionLockOnTabClose: true,
+    encryptionClearClipboardAfterCopy: false,
+    encryptionClipboardClearDelay: 60000,
+    encryptionPasswordStrength: 'basic',
+    encryptionKeepBackup: true,
+    encryptionPbkdf2Iterations: 600000,
+    encryptionShowLockIcon: true,
 
     // --------------------------------------------------------------------------
 

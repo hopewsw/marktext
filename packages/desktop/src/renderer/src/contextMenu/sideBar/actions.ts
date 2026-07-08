@@ -13,6 +13,13 @@ export const newDirectory = (_menuItem?: MenuItemArg, _browserWindow?: BrowserWi
   bus.emit('SIDEBAR::new', 'directory')
 }
 
+export const newEncryptedFile = (
+  _menuItem?: MenuItemArg,
+  _browserWindow?: BrowserWindowArg
+): void => {
+  bus.emit('SIDEBAR::new', 'encrypted-file')
+}
+
 export const copy = (_menuItem?: MenuItemArg, _browserWindow?: BrowserWindowArg): void => {
   bus.emit('SIDEBAR::copy-cut', 'copy')
 }

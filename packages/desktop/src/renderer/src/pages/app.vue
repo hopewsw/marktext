@@ -18,7 +18,7 @@
         class="editor-placeholder"
       />
       <recent v-if="!hasCurrentFile && init" />
-      <editor-with-tabs
+        <editor-with-tabs
         v-if="hasCurrentFile && init"
         :markdown="markdown"
         :cursor="cursor"
@@ -27,10 +27,12 @@
         :show-tab-bar="showTabBar"
         :text-direction="textDirection"
         :platform="platform"
+        :is-locked="isLocked"
       />
       <command-palette />
       <about-dialog />
       <export-setting-dialog />
+      <encryption-dialog />
       <rename />
       <import-modal />
     </div>
@@ -51,6 +53,7 @@ import CommandPalette from '@/components/commandPalette/index.vue'
 import ExportSettingDialog from '@/components/exportSettings/index.vue'
 import Rename from '@/components/rename/index.vue'
 import ImportModal from '@/components/import/index.vue'
+import EncryptionDialog from '@/components/encryption/encryptionDialog.vue'
 import bus from '@/bus'
 import { DEFAULT_STYLE } from '@/config'
 import { useLayoutStore } from '@/store/layout'
@@ -60,6 +63,7 @@ import { useEditorStore } from '@/store/editor'
 import { useCommandCenterStore } from '@/store/commandCenter'
 import { useProjectStore } from '@/store/project'
 import { useAutoUpdatesStore } from '@/store/autoUpdates'
+import { initEncryptionAutoLock } from '@/services/encryptionAutoLock'
 import { useNotificationStore } from '@/store/notification'
 
 const mainStore = useMainStore()
@@ -84,6 +88,7 @@ const { currentFile } = storeToRefs(editorStore)
 const pathname = computed(() => currentFile.value?.pathname)
 const filename = computed(() => currentFile.value?.filename)
 const isSaved = computed(() => currentFile.value?.isSaved)
+const isLocked = computed(() => !!currentFile.value?.isLocked)
 // `markdown` is read by `<editor-with-tabs>` whose prop is `required: true`.
 // In template space we render that subtree only when `hasCurrentFile` is set,
 // but vue-tsc can't see through the v-if guard — coalesce to '' so the prop
@@ -182,6 +187,8 @@ onMounted(async () => {
   editorStore.LISTEN_FOR_SET_ENCODING()
   editorStore.LISTEN_FOR_SET_FINAL_NEWLINE()
   editorStore.LISTEN_FOR_NEW_TAB()
+  editorStore.LISTEN_FOR_MDE()
+  initEncryptionAutoLock()
   editorStore.LISTEN_FOR_CLOSE_TAB()
   editorStore.LISTEN_FOR_TAB_CYCLE()
   editorStore.LISTEN_FOR_SWITCH_TABS()

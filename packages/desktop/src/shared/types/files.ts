@@ -23,6 +23,12 @@ export interface MarkdownDocument {
   adjustLineEndingOnSave?: boolean
   trimTrailingNewline?: number
   isMixedLineEndings?: boolean
+  isEncrypted?: boolean
+  isLocked?: boolean
+  encryptionMeta?: {
+    pbkdf2Iterations: number
+    formatVersion: number
+  }
 }
 
 export interface FileHistory {
@@ -88,6 +94,14 @@ export interface IFileState {
   // Muya block tree; only populated for the actively edited tab.
   blocks?: unknown
   isMixedLineEndings?: boolean
+  isEncrypted?: boolean
+  isLocked?: boolean
+  rememberSession?: boolean
+  sessionKeyActive?: boolean
+  encryptionMeta?: {
+    pbkdf2Iterations: number
+    formatVersion: number
+  }
 }
 
 /**
@@ -122,6 +136,13 @@ export interface SaveOptions {
   lineEnding?: LineEnding | string
   adjustLineEndingOnSave?: boolean
   trimTrailingNewline?: number
+  isEncrypted?: boolean
+  useSessionKey?: boolean
+  /** First-time encrypted save only; never persisted. */
+  encryptionPassword?: string
+  encryptionKeepBackup?: boolean
+  /** PBKDF2 iterations for first-time encrypted save only. */
+  encryptionPbkdf2Iterations?: number
 }
 
 /**

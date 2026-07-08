@@ -352,6 +352,32 @@ export const launchWithMarkdown = async(
   return { app, page, filePath }
 }
 
+/** Close without waiting on unsaved-file or encryption dialogs. */
+export const forceCloseElectronApp = async(app: ElectronApplication): Promise<void> => {
+  try {
+    await app.evaluate(({ BrowserWindow, ipcMain }) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        ipcMain.emit('window-close-by-id', win.id)
+      }
+    })
+    await Promise.race([
+      app.close(),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 5000)
+      })
+    ])
+  } catch {
+    // Playwright may still be waiting on a hung window — kill the process.
+    try {
+      await app.evaluate(({ app: electronApp }) => {
+        electronApp.exit(0)
+      })
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export const sendIpcToRenderer = async(
   app: ElectronApplication,
   channel: string,
