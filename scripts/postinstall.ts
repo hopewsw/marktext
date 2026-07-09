@@ -15,10 +15,10 @@
  * Monorepo layout: the Electron desktop app lives in packages/desktop with
  * its own node_modules (workspace-local deps are not hoisted to the root —
  * `shamefully-hoist=true` only flattens transitive deps). All Electron-related
- * lookups (binary, install.js, native-keymap, electron-rebuild, patch-package)
- * therefore resolve under packages/desktop/node_modules. patch-package and
- * electron-rebuild also run with cwd=packages/desktop so that `patches/` and
- * the local package.json are picked up correctly.
+ * lookups (binary, install.js, native-keymap, patch-package)
+ * therefore resolve under packages/desktop/node_modules. patch-package also
+ * runs with cwd=packages/desktop so that `patches/` and the local
+ * package.json are picked up correctly.
  */
 
 const { execSync } = require('child_process')
@@ -37,11 +37,10 @@ function run(cmd, opts = {}) {
 // regardless of whether the caller is pnpm (primary) or npm (fallback).
 const userAgent = process.env.npm_config_user_agent || ''
 const isPnpm = userAgent.startsWith('pnpm')
-// patch-package and electron-rebuild are locally installed; call their
-// node_modules/.bin entries directly (hoisted by shamefully-hoist=true).
+// patch-package is locally installed; call its node_modules/.bin entry directly
+// (hoisted by shamefully-hoist=true).
 const ext = process.platform === 'win32' ? '.cmd' : ''
 const patchPackageBin = path.join(desktopRoot, 'node_modules', '.bin', `patch-package${ext}`)
-const electronRebuildBin = path.join(desktopRoot, 'node_modules', '.bin', `electron-rebuild${ext}`)
 
 // ── 1. Ensure native-keymap source is present (pm removes it on optional failure) ──
 const nativeKeymapDir = path.join(desktopRoot, 'node_modules', 'native-keymap')
@@ -151,9 +150,9 @@ if (!fs.existsSync(electronInstall)) {
 console.log('Applying patches...')
 run(`"${patchPackageBin}"`, { cwd: desktopRoot })
 
-// ── 4. Rebuild native modules for Electron ABI ──────────────────────────────
-console.log('Rebuilding native modules for Electron...')
-run(`"${electronRebuildBin}" -f`, { cwd: desktopRoot })
+// ── 4. Stage prebuilt native modules; rebuild only when still missing ───────
+console.log('Ensuring native modules for Electron...')
+run('pnpm tsx scripts/ensureNativeModules.ts')
 
 // ── 5. Generate minified locale files ───────────────────────────────────────
 console.log('Minifying locales...')

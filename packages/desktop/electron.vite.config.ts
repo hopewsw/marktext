@@ -18,12 +18,16 @@ export default defineConfig({
     // hence, we need to "exclude" (in order to NOT externalise) ESonly modules so that they can be converted to commonJS and can be required() afterwards correctly
     build: {
       externalizeDeps: {
-        // Bundle electron-store + plist inline so they are available as a
-        // CommonJS require() after electron-vite converts the main process
-        // output. plist 5 ships ESM-only (no CJS `exports` entry), so leaving
-        // it externalized makes the main process `require('plist')` throw
-        // ERR_PACKAGE_PATH_NOT_EXPORTED at startup.
-        exclude: ['electron-store', 'plist'],
+        // Bundle electron-store + plist + write-file-atomic inline so they are
+        // available as a CommonJS require() after electron-vite converts the
+        // main process output. plist 5 ships ESM-only (no CJS `exports`
+        // entry), so leaving it externalized makes the main process
+        // `require('plist')` throw ERR_PACKAGE_PATH_NOT_EXPORTED at startup.
+        // write-file-atomic is a direct runtime dep but pnpm may hoist it only
+        // to the workspace root, so electron-builder (which packages
+        // packages/desktop/node_modules) can omit it and the installed app
+        // crashes with "Cannot find module 'write-file-atomic'".
+        exclude: ['electron-store', 'plist', 'write-file-atomic'],
         include: ['native-keymap']
       }
     },
