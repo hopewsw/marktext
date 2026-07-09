@@ -1,6 +1,8 @@
 import type Content from '../../block/base/content';
+import type Parent from '../../block/base/parent';
 import type { Muya } from '../../muya';
 import { describe, expect, it, vi } from 'vitest';
+import { ScrollPage } from '../../block/scrollPage';
 
 // The clipboard module pulls in CodeBlockContent → utils/prism which touches
 // `window` at import time. Stub the prism shim so the test can run under Node
@@ -48,6 +50,7 @@ function makeAnchorBlock(initialText = '', cursor = 0) {
             end: { offset: cursor },
         }),
         setCursor: vi.fn(),
+        update: vi.fn(),
         getAnchor: () => null,
     };
     return block as unknown as Content & { setCursor: ReturnType<typeof vi.fn> };
@@ -62,7 +65,7 @@ function makeClipboard(
         get: () => ({
             getSelection: () => ({
                 isSelectionInSameBlock: true,
-                anchorBlock,
+                anchor: { block: anchorBlock },
             }),
         }),
     });
@@ -147,8 +150,21 @@ describe('clipboard.pasteHandler — clipboardFilePath hook', () => {
         // snapshot of `event.clipboardData` must be taken synchronously BEFORE
         // that await — otherwise the detached DataTransfer would yield '' here
         // and the paste would silently insert nothing.
+        //
+        // A single pasted paragraph merges inline into the anchor (muyajs
+        // `checkPasteType` MERGE), so the captured text lands in the anchor's
+        // own text rather than a separate block.
+        const spy = vi.spyOn(ScrollPage, 'loadBlock');
+
         const clipboardFilePath = vi.fn().mockResolvedValue('');
         const anchorBlock = makeAnchorBlock('', 0);
+        const wrapper = {
+            blockName: 'paragraph',
+            getState: () => ({ name: 'paragraph', text: '' }),
+            remove: vi.fn(),
+            parent: { insertAfter: vi.fn() },
+        } as unknown as Parent;
+        anchorBlock.getAnchor = () => wrapper;
         const clipboard = makeClipboard({ clipboardFilePath }, anchorBlock);
         const { event, getData } = makePasteEvent({ 'text/plain': 'hello world' });
 
@@ -156,9 +172,11 @@ describe('clipboard.pasteHandler — clipboardFilePath hook', () => {
 
         expect(clipboardFilePath).toHaveBeenCalledOnce();
         expect(getData).toHaveBeenCalledWith('text/plain');
-        // The captured text survived the async hook and was pasted in.
+        // The captured text survived the async hook and reached the paste path.
         expect(anchorBlock.text).toBe('hello world');
-        expect(anchorBlock.setCursor).toHaveBeenCalledWith(11, 11, true);
+        expect(spy).not.toHaveBeenCalled();
+
+        spy.mockRestore();
     });
 
     it('falls through to the normal paste when the resolved path is not an image', async () => {

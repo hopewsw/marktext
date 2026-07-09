@@ -31,6 +31,7 @@ declare module '@muyajs/core' {
   export const ja: ILocale
   export const ko: ILocale
   export const pt: ILocale
+  export const tr: ILocale
   export const zhCN: ILocale
   export const zhTW: ILocale
 
@@ -64,6 +65,7 @@ declare module '@muyajs/core' {
   export const ParagraphFrontMenu: any
   export const ParagraphQuickInsertMenu: any
   export const PreviewToolBar: any
+  export const TableChessboard: any
   export const TableColumnToolbar: any
   export const TableDragBar: any
   export const TableRowColumMenu: any
@@ -72,12 +74,16 @@ declare module '@muyajs/core' {
     markdown: string
     constructor(markdown: string, muya?: unknown)
     renderHtml(): Promise<string>
-    generate(options?: { title?: string; extraCSS?: string }): Promise<string>
+    generate(options?: {
+      title?: string
+      extraCSS?: string
+      inlineStyles?: boolean
+      dir?: string
+    }): Promise<string>
   }
 
   export function renderToStaticHTML(...args: any[]): any
 
-  // Utils.
   export function escapeHTML(str: string): string
   export function unescapeHTML(str: string): string
   export function sanitize(html: string, config?: any, isInline?: boolean): string

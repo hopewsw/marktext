@@ -65,8 +65,7 @@ export const WHITELIST_ATTRIBUTES = [
 
 const UNICODE_WHITESPACE_REG = /^\s/;
 
-// NON-STANDARD EXTENSION — a deliberate divergence from CommonMark, ported
-// from the legacy muyajs tokenizer (packages/muyajs/lib/parser/utils.js).
+// NON-STANDARD EXTENSION — a deliberate divergence from CommonMark.
 //
 // CommonMark §6.2 only counts Unicode whitespace and Unicode punctuation as
 // emphasis flanking boundaries. CJK ideographs are Lo (Letter, other) —
@@ -74,7 +73,7 @@ const UNICODE_WHITESPACE_REG = /^\s/;
 // `中文**"加粗"**中文` MUST NOT open a strong run. But CJK scripts don't use
 // spaces between words, so that denies emphasis to virtually any CJK paragraph
 // that wraps the `**` run with punctuation (quotes, parentheses, brackets, …).
-// Typora, VSCode markdownlint, Joplin and the legacy muyajs engine all widen
+// Typora, VSCode markdownlint and Joplin all widen
 // the flanking check so CJK counts as a boundary; we match that here so the
 // live editor (inlineRenderer) bolds these spans consistently with the
 // marked-based static / export render path.
@@ -144,6 +143,15 @@ export function lowerPriority(src: string, offset: number, rules: Rules) {
 
     for (i = 0; i < offset; i++) {
         if (ignoreIndex.includes(i))
+            continue;
+
+        // A character preceded by an odd number of backslashes is escaped
+        // (e.g. `\$`), so it cannot open a higher-priority construct such as
+        // inline math/code and must not lower the surrounding emphasis.
+        let backslashes = 0;
+        for (let j = i - 1; j >= 0 && src[j] === '\\'; j--)
+            backslashes++;
+        if (backslashes % 2 === 1)
             continue;
 
         const text = src.substring(i);
@@ -226,7 +234,7 @@ function canOpenEmphasis(src: string, marker: string, pending: string) {
 
     const precededChar = lastCodePointChar(pending) || '\n';
     // Past end of src → '' (matches neither whitespace nor punctuation),
-    // preserving the legacy `RegExp.test(undefined)` semantics type-safely.
+    // preserving the `RegExp.test(undefined)` semantics type-safely.
     const followedChar = codePointCharAt(src, marker.length) ?? '';
     // not followed by Unicode whitespace,
     if (UNICODE_WHITESPACE_REG.test(followedChar))

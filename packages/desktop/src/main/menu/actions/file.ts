@@ -12,7 +12,13 @@ import {
 } from 'electron'
 import log from 'electron-log'
 import { isDirectory, isFile, exists } from 'common/filesystem'
-import { MARKDOWN_EXTENSIONS, ENCRYPTED_MARKDOWN_EXTENSIONS, isOpenableDocumentFile, hasEncryptedMarkdownExtension } from 'common/filesystem/paths'
+import {
+  MARKDOWN_EXTENSIONS,
+  ENCRYPTED_MARKDOWN_EXTENSIONS,
+  isOpenableDocumentFile,
+  hasEncryptedMarkdownExtension,
+  isDangerousExecutableFile
+} from 'common/filesystem/paths'
 import { checkUpdates, userSetting } from './marktext'
 import { showTabBar } from './view'
 import { COMMANDS } from '../../commands'
@@ -108,7 +114,15 @@ const handleResponseForExport = async(e: IpcMainEvent, payload: ExportPayload): 
   if (filePath && !canceled) {
     try {
       if (type === 'pdf') {
-        const options: Electron.PrintToPDFOptions = { printBackground: true }
+        // Build a clickable bookmark/outline tree from the document's h1-h6
+        // headings so exported PDFs have a navigation pane (#2989). The outline
+        // is derived from the tagged-PDF structure tree, so generateTaggedPDF is
+        // required — generateDocumentOutline alone produces no outline.
+        const options: Electron.PrintToPDFOptions = {
+          printBackground: true,
+          generateTaggedPDF: true,
+          generateDocumentOutline: true
+        }
         Object.assign(options, getPdfPageOptions(pageOptions))
         const data = await win.webContents.printToPDF(options)
         removePrintServiceFromWindow(win)
@@ -602,7 +616,7 @@ interface FormatLinkPayload {
   dirname?: string
 }
 
-ipcMain.on('mt::format-link-click', (e, { data, dirname }: FormatLinkPayload) => {
+ipcMain.on('mt::format-link-click', async(e, { data, dirname }: FormatLinkPayload) => {
   if (!data || (!data.href && !data.text)) {
     return
   }
@@ -648,6 +662,23 @@ ipcMain.on('mt::format-link-click', (e, { data, dirname }: FormatLinkPayload) =>
         openFileOrFolder(innerWin, pathname)
       }
     } else {
+      // A link in an untrusted document could point at a co-located script or
+      // executable; opening it via the OS shell would run code silently (#3575).
+      if (isDangerousExecutableFile(pathname)) {
+        const { response } = await dialog.showMessageBox(win, {
+          type: 'warning',
+          buttons: [t('dialog.cancel'), t('dialog.openAnyway')],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+          title: t('dialog.unsafeFileTitle'),
+          message: t('dialog.unsafeFileMessage'),
+          detail: t('dialog.unsafeFileDetail', { name: path.basename(pathname) })
+        })
+        if (response !== 1) {
+          return
+        }
+      }
       shell.openPath(pathname)
     }
   }

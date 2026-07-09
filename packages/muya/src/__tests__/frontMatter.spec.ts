@@ -2,9 +2,10 @@
 
 import type Content from '../block/base/content';
 import type Parent from '../block/base/parent';
+import type { IFrontmatterState } from '../state/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { replaceBlockByLabel } from '../block/blockTransforms';
 import { Muya } from '../muya';
-import { replaceBlockByLabel } from '../ui/paragraphQuickInsertMenu/config';
 
 // Coverage for the two front-matter entry points — the desktop Paragraph >
 // Front Matter menu item (`muya.updateParagraph('front-matter')`) and the
@@ -113,8 +114,7 @@ describe('muya.updateParagraph(\'front-matter\')', () => {
             expect(muya.getState()[0].name).toBe('frontmatter');
         });
 
-        // eslint-disable-next-line ts/no-explicit-any
-        expect((muya.getState()[0] as any).meta.lang).toBe('yaml');
+        expect((muya.getState()[0] as IFrontmatterState).meta.lang).toBe('yaml');
         expect(muya.getMarkdown().startsWith('---\n')).toBe(true);
     });
 
@@ -127,8 +127,7 @@ describe('muya.updateParagraph(\'front-matter\')', () => {
             expect(muya.getState()[0].name).toBe('frontmatter');
         });
 
-        // eslint-disable-next-line ts/no-explicit-any
-        expect((muya.getState()[0] as any).meta.lang).toBe('toml');
+        expect((muya.getState()[0] as IFrontmatterState).meta.lang).toBe('toml');
         expect(muya.getMarkdown().startsWith('+++\n')).toBe(true);
     });
 
@@ -141,8 +140,7 @@ describe('muya.updateParagraph(\'front-matter\')', () => {
             expect(muya.getState()[0].name).toBe('frontmatter');
         });
 
-        // eslint-disable-next-line ts/no-explicit-any
-        expect((muya.getState()[0] as any).meta.lang).toBe('json');
+        expect((muya.getState()[0] as IFrontmatterState).meta.lang).toBe('json');
         expect(muya.getMarkdown().startsWith(';;;\n')).toBe(true);
     });
 
@@ -155,8 +153,7 @@ describe('muya.updateParagraph(\'front-matter\')', () => {
             expect(muya.getState()[0].name).toBe('frontmatter');
         });
 
-        // eslint-disable-next-line ts/no-explicit-any
-        const meta = (muya.getState()[0] as any).meta;
+        const meta = (muya.getState()[0] as IFrontmatterState).meta;
         expect(meta.lang).toBe('json');
         expect(meta.style).toBe('{');
         // The `{` style serializes the JSON-braces variant, NOT the `;;;` fences.
@@ -172,8 +169,10 @@ describe('muya.updateParagraph(\'front-matter\')', () => {
 // in-place `block.replaceWith` that could create front matter MID-document by
 // converting an empty paragraph — front matter is only valid at document start.
 describe('quick-insert front matter (replaceBlockByLabel)', () => {
-    it('inserts at document start, not in place, when triggered mid-document', async () => {
-        const muya = bootMuya('first para\n\nsecond para\n');
+    it('inserts at document start, clears the `/` trigger, keeps other blocks', async () => {
+        // The trigger paragraph carries the `/` the user typed to open the
+        // quick-insert menu (its whole text matches `/^[/、]\S*$/`).
+        const muya = bootMuya('first para\n\n/\n');
         // Quick-insert is triggered on the SECOND paragraph (mid-document). The
         // menu passes the leaf block at the cursor as `block`.
         const block = leafAt(muya, 1);
@@ -185,14 +184,16 @@ describe('quick-insert front matter (replaceBlockByLabel)', () => {
         });
 
         const state = muya.getState();
-        // The new front matter is prepended; both original paragraphs survive
-        // intact (the in-place replace bug would have destroyed the second one).
+        // The new front matter is prepended; the non-trigger paragraph survives
+        // intact (the in-place replace bug would have destroyed it) and the `/`
+        // trigger paragraph remains as an emptied block — its `/` is cleared,
+        // not left behind in the document.
         expect(state.length).toBe(3);
         expect(state[1].name).toBe('paragraph');
         expect(state[2].name).toBe('paragraph');
         const md = muya.getMarkdown();
         expect(md).toContain('first para');
-        expect(md).toContain('second para');
+        expect(md).not.toContain('/');
     });
 
     it('is idempotent — no second front matter block when one already exists', async () => {
@@ -218,8 +219,64 @@ describe('quick-insert front matter (replaceBlockByLabel)', () => {
             expect(muya.getState()[0].name).toBe('frontmatter');
         });
 
-        // eslint-disable-next-line ts/no-explicit-any
-        expect((muya.getState()[0] as any).meta.lang).toBe('toml');
+        expect((muya.getState()[0] as IFrontmatterState).meta.lang).toBe('toml');
         expect(muya.getMarkdown().startsWith('+++\n')).toBe(true);
+    });
+});
+
+// The focused front-matter block renders before/after delimiter markers via the
+// CSS rules `pre.mu-active.mu-frontmatter::before/::after` (blockSyntax.css). Two
+// regressions are guarded:
+//   - The block's class must be `mu-frontmatter`; the CSS once targeted the
+//     non-existent `mu-front-matter`, so the markers never showed (muyajs parity).
+//   - The marker text is driven by the `frontMatterStart` / `frontMatterEnd`
+//     attributes on the <pre>, which mirror the real delimiters `stateToMarkdown`
+//     emits per type (yaml `---`, toml `+++`, json `;;;`, json-braces `{` / `}`),
+//     not a hardcoded `---`.
+describe('front matter delimiter marker', () => {
+    function frontmatterPre(muya: Muya): HTMLElement {
+        const block = muya.editor.scrollPage!.find(0) as unknown as Parent;
+        return block.domNode!;
+    }
+
+    async function insertFrontMatter(frontmatterType?: string): Promise<HTMLElement> {
+        const muya = bootMuya('body\n', frontmatterType);
+        placeCursorOn(muya, 0);
+        muya.updateParagraph('front-matter');
+        await vi.waitFor(() => {
+            expect(muya.getState()[0].name).toBe('frontmatter');
+        });
+        return frontmatterPre(muya);
+    }
+
+    it('tags the front-matter <pre> with the class the marker CSS targets', () => {
+        const muya = bootMuya('---\ntitle: hi\n---\n\nbody\n');
+        const pre = frontmatterPre(muya);
+        expect(pre.tagName).toBe('PRE');
+        expect(pre.classList.contains('mu-frontmatter')).toBe(true);
+    });
+
+    it('yaml (default \'-\') shows --- before and after', async () => {
+        const pre = await insertFrontMatter();
+        expect(pre.getAttribute('frontMatterStart')).toBe('---');
+        expect(pre.getAttribute('frontMatterEnd')).toBe('---');
+    });
+
+    it('toml (\'+\') shows +++ before and after', async () => {
+        const pre = await insertFrontMatter('+');
+        expect(pre.getAttribute('frontMatterStart')).toBe('+++');
+        expect(pre.getAttribute('frontMatterEnd')).toBe('+++');
+    });
+
+    it('json (\';\') shows ;;; before and after', async () => {
+        const pre = await insertFrontMatter(';');
+        expect(pre.getAttribute('frontMatterStart')).toBe(';;;');
+        expect(pre.getAttribute('frontMatterEnd')).toBe(';;;');
+    });
+
+    it('json braces (\'{\') shows { before and } after', async () => {
+        const pre = await insertFrontMatter('{');
+        expect(pre.getAttribute('frontMatterStart')).toBe('{');
+        expect(pre.getAttribute('frontMatterEnd')).toBe('}');
     });
 });

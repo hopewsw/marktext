@@ -27,8 +27,7 @@ export function getImageInfo(image: HTMLElement): IImageInfo {
 
 // A local image path that is already anchored to a filesystem root:
 // POSIX (`/foo`), Windows UNC (`\\host\share`), or a drive letter
-// (`C:\foo` / `C:/foo`). Mirrors legacy muyajs `getImageInfo`'s
-// `isAbsoluteLocal` check so absolute paths are NOT resolved against the
+// (`C:\foo` / `C:/foo`), so absolute paths are NOT resolved against the
 // document directory.
 const ABSOLUTE_LOCAL_REG = /^(?:\/|\\\\|[a-z]:\\|[a-z]:\/).+/i;
 
@@ -81,11 +80,10 @@ export function getImageSrc(src: string) {
     const isUrl = URL_REG.test(src) || (imageExtension && isFileUrl);
     if (imageExtension) {
         const isAbsoluteLocal = ABSOLUTE_LOCAL_REG.test(src);
-        // Anchor a relative local path to the document directory, mirroring
-        // legacy muyajs `getImageInfo(src, baseUrl = window.DIRNAME)`. The
+        // Anchor a relative local path to the document directory. The
         // engine runs in the host renderer where `window.DIRNAME` tracks the
         // current document's directory; when it is absent (headless / no open
-        // file) we fall back to the legacy `file://${src}` form.
+        // file) we fall back to the `file://${src}` form.
         const baseUrl
             = typeof window !== 'undefined' ? window.DIRNAME : undefined;
         if (isUrl) {
@@ -137,7 +135,10 @@ export async function loadImage(url: string, detectContentType = false): Promise
 }> {
     if (detectContentType) {
         const isImage = await checkImageContentType(url);
-        if (!isImage)
+        // Only bail out when we positively know it is NOT an image. `null`
+        // means we couldn't check (e.g. a cross-origin HEAD blocked by CSP);
+        // fall through to the actual load, which `img-src` permits (#3837).
+        if (isImage === false)
             // eslint-disable-next-line prefer-promise-reject-errors
             return Promise.reject('not an image.');
     }
@@ -159,24 +160,59 @@ export async function loadImage(url: string, detectContentType = false): Promise
     });
 }
 
-export async function checkImageContentType(url: string) {
+// Only a same-origin URL can have its Content-Type read from the renderer: a
+// cross-origin response has its headers stripped by CORS, and the app's CSP
+// (no `connect-src`, so it falls back to `default-src 'self'`) refuses the
+// request outright. Relative/opaque URLs are treated as same-origin so the
+// check is still attempted.
+function isSameOrigin(url: string): boolean {
     try {
-        const res = await fetch(url, { method: 'HEAD' });
-        const contentType = res.headers.get('content-type');
-
-        if (
-            contentType
-            && res.status === 200
-            && /^image\/(?:jpeg|png|gif|svg\+xml|webp)$/.test(contentType)
-        ) {
-            return true;
-        }
-
-        return false;
+        return new URL(url, window.location.href).origin === window.location.origin;
     }
     catch {
-        return false;
+        return true;
     }
+}
+
+// Returns `true`/`false` when a HEAD response positively identifies the URL as
+// an image (or not), or `null` when that can't be determined. A `null` must NOT
+// be read as "not an image": the actual <img> load is governed by the far more
+// permissive `img-src`, so callers should still attempt it (#3837 — shields.io
+// badges and other extensionless remote images).
+export async function checkImageContentType(url: string): Promise<boolean | null> {
+    // Don't fire a HEAD we could never read: a cross-origin request is refused
+    // by the CSP (logging a console error) and unreadable under CORS anyway.
+    // Report "undetermined" and let the caller fall through to the <img> load.
+    if (!isSameOrigin(url))
+        return null;
+
+    try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.status !== 200)
+            return null;
+
+        // Content-Type can carry parameters (e.g. `image/svg+xml;charset=utf-8`);
+        // match only the MIME type.
+        const contentType = res.headers.get('content-type')?.split(';')[0].trim();
+        if (!contentType)
+            return null;
+
+        return /^image\/(?:jpeg|png|gif|svg\+xml|webp)$/.test(contentType);
+    }
+    catch {
+        return null;
+    }
+}
+
+// Percent-encode the chars that break a markdown image destination — an
+// unbalanced `)` truncates the path (#3060). `encodeURIComponent` leaves `(`/`)`
+// untouched, so encode them explicitly.
+export function encodeImageSrc(src: string): string {
+    return src
+        .replace(/ /g, encodeURI(' '))
+        .replace(/#/g, encodeURIComponent('#'))
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29');
 }
 
 export function correctImageSrc(src: string) {

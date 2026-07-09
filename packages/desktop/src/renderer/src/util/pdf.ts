@@ -48,21 +48,10 @@ export const getCssForOptions = async(options: PdfCssOptions): Promise<string> =
   if (isPrintable) {
     output += `@media print{@page{
       margin: ${pageMarginTop}mm ${pageMarginRight}mm ${pageMarginBottom}mm ${pageMarginLeft}mm;}`
+    // Keep a heading with the content that follows it, so a page never breaks
+    // immediately after a heading, and never split a multi-line heading (#3039).
+    output += 'h1,h2,h3,h4,h5,h6{break-after:avoid;break-inside:avoid;}'
   }
-
-  // Font options
-  output += '.markdown-body{'
-  if (fontFamily) {
-    output += `font-family:"${fontFamily}",${FALLBACK_FONT_FAMILIES};`
-    output = `.hf-container{font-family:"${fontFamily}",${FALLBACK_FONT_FAMILIES};}${output}`
-  }
-  if (fontSize) {
-    output += `font-size:${fontSize}px;`
-  }
-  if (lineHeight) {
-    output += `line-height:${lineHeight};`
-  }
-  output += '}'
 
   // Auto numbering headings via CSS
   if (autoNumberingHeadings) {
@@ -81,8 +70,7 @@ export const getCssForOptions = async(options: PdfCssOptions): Promise<string> =
       output += liberTheme
     } else {
       // Read theme from disk
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { userDataPath } = (window as any).marktext.paths as { userDataPath: string }
+      const { userDataPath } = window.marktext!.paths as { userDataPath: string }
       const themePath = window.path.join(userDataPath, 'themes/export', theme)
       if (await window.fileUtils.isFile(themePath)) {
         try {
@@ -96,6 +84,23 @@ export const getCssForOptions = async(options: PdfCssOptions): Promise<string> =
       }
     }
   }
+
+  // Font options. Emitted AFTER the theme CSS so the "Overwrite theme font"
+  // settings win the cascade: a selected export theme also sets `.markdown-body`
+  // font-size/line-height/font-family, and at equal specificity the later rule
+  // wins — so the user's override must come last to actually override the theme.
+  output += '.markdown-body{'
+  if (fontFamily) {
+    output += `font-family:"${fontFamily}",${FALLBACK_FONT_FAMILIES};`
+    output = `.hf-container{font-family:"${fontFamily}",${FALLBACK_FONT_FAMILIES};}${output}`
+  }
+  if (fontSize) {
+    output += `font-size:${fontSize}px;`
+  }
+  if (lineHeight) {
+    output += `line-height:${lineHeight};`
+  }
+  output += '}'
 
   if (headerFooterFontSize) {
     output += `.page-header .hf-container,

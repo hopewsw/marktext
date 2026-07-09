@@ -1,5 +1,5 @@
 export type { ILocale } from './i18n/types';
-export { de, en, es, fr, ja, ko, pt, zhCN, zhTW } from './locales';
+export { de, en, es, fr, ja, ko, pt, tr, zhCN, zhTW } from './locales';
 
 export { Muya } from './muya';
 export type { ITocItem } from './state/getTOC';
@@ -24,6 +24,7 @@ export { ParagraphFrontButton } from './ui/paragraphFrontButton';
 export { ParagraphFrontMenu } from './ui/paragraphFrontMenu';
 export { ParagraphQuickInsertMenu } from './ui/paragraphQuickInsertMenu';
 export { PreviewToolBar } from './ui/previewToolBar';
+export { default as TableChessboard } from './ui/tableChessboard';
 export { TableColumnToolbar } from './ui/tableColumnToolbar';
 export { TableDragBar } from './ui/tableDragBar';
 export { TableRowColumMenu } from './ui/tableRowColumMenu';
