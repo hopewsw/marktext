@@ -63,6 +63,15 @@ class SessionVault {
     this.removeEntry(this.normalizeKey(pathname))
   }
 
+  /** Move a session entry when the file on disk is renamed. */
+  rename(oldPathname: string, newPathname: string): void {
+    const oldKey = this.normalizeKey(oldPathname)
+    const entry = this.entries.get(oldKey)
+    if (!entry) return
+    this.entries.delete(oldKey)
+    this.entries.set(this.normalizeKey(newPathname), entry)
+  }
+
   clear(): void {
     for (const key of [...this.entries.keys()]) {
       this.removeEntry(key)

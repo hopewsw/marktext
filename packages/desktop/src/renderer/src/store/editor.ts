@@ -676,7 +676,7 @@ export const useEditorStore = defineStore('editor', {
             tab.isEncrypted = true
             tab.sessionKeyActive = true
           }
-          debouncedSendBufferedState()
+          sendBufferedState()
         }
       })
 
@@ -882,7 +882,7 @@ export const useEditorStore = defineStore('editor', {
      */
     RENAME_IF_NEEDED({ src, dest }: { src: string; dest: string }): void {
       this.tabs.forEach((tab) => {
-        if (tab.pathname === src) {
+        if (window.fileUtils.isSamePathSync(tab.pathname, src)) {
           tab.pathname = dest
           tab.filename = window.path.basename(dest)
         }
@@ -893,7 +893,8 @@ export const useEditorStore = defineStore('editor', {
       if (this.currentFile != null && this.currentFile.pathname === dest) {
         window.DIRNAME = window.path.dirname(dest)
       }
-      debouncedSendBufferedState()
+      window.electron.ipcRenderer.send('mt::document-path-changed', src, dest)
+      sendBufferedState()
     },
 
     UPDATE_CURRENT_FILE(currentFile: IFileState): void {

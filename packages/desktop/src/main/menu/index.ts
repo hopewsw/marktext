@@ -3,6 +3,7 @@ import path from 'path'
 import { app, Menu, ipcMain, type BrowserWindow } from 'electron'
 import log from 'electron-log'
 import { ensureDirSync, isDirectory2, isFile2 } from 'common/filesystem'
+import { isSamePathSync } from 'common/filesystem/paths'
 import { isLinux, isOsx, isWindows } from '../config'
 import { updateSidebarMenu } from '../menu/actions/edit'
 import { updateFormatMenu } from '../menu/actions/format'
@@ -111,6 +112,44 @@ class AppMenu {
       const json = JSON.stringify(recentDocuments, null, 2)
       fs.writeFileSync(RECENTS_PATH, json, 'utf-8')
     }
+  }
+
+  /**
+   * Replace a recently used document path after a rename.
+   */
+  replaceRecentlyUsedDocument(oldPath: string, newPath: string): void {
+    const { isOsxOrWindows, RECENTS_PATH } = this
+
+    if (isSamePathSync(oldPath, newPath)) return
+
+    const recentDocuments = this.getRecentlyUsedDocuments()
+    const index = recentDocuments.findIndex((p) => isSamePathSync(p, oldPath))
+    if (index === -1) {
+      this.addRecentlyUsedDocument(newPath)
+      return
+    }
+
+    recentDocuments.splice(index, 1)
+    const duplicateIndex = recentDocuments.findIndex((p) => isSamePathSync(p, newPath))
+    if (duplicateIndex !== -1) {
+      recentDocuments.splice(duplicateIndex, 1)
+    }
+    recentDocuments.unshift(newPath)
+
+    if (recentDocuments.length > MAX_RECENTLY_USED_DOCUMENTS) {
+      recentDocuments.splice(
+        MAX_RECENTLY_USED_DOCUMENTS,
+        recentDocuments.length - MAX_RECENTLY_USED_DOCUMENTS
+      )
+    }
+
+    if (isOsxOrWindows) app.addRecentDocument(newPath)
+    if (!isOsx) {
+      ensureDirSync(this._userDataPath)
+      fs.writeFileSync(RECENTS_PATH, JSON.stringify(recentDocuments, null, 2), 'utf-8')
+    }
+
+    this.updateAppMenu(recentDocuments)
   }
 
   /**

@@ -7,6 +7,7 @@ import Watcher, {
   WATCHER_STABILITY_POLL_INTERVAL
 } from '../filesystem/watcher'
 import { onInternalChannel } from '../utils/internalIpc'
+import { sessionVault } from '../crypto/sessionVault'
 import type BaseWindow from '../windows/base'
 import type Preference from '../preferences'
 import { WindowType } from '../windows/base'
@@ -73,6 +74,7 @@ interface AppMenuLike {
   setActiveWindow(windowId: number): void
   removeWindowMenu(windowId: number): void
   updateAlwaysOnTopMenu(windowId: number, flag: boolean): void
+  replaceRecentlyUsedDocument(oldPath: string, newPath: string): void
 }
 
 interface EditorBufferStoreLike {
@@ -445,14 +447,18 @@ class WindowManager extends TypedEmitter<WindowManagerEvents> {
     onInternalChannel(
       'window-change-file-path',
       (windowId: number, pathname: string, oldPathname: string) => {
-        const editor = this.get(windowId) as EditorWindow | undefined
-        if (!editor) {
-          log.error(`Cannot find window id "${windowId}" to change file path.`)
-          return
-        }
-        editor.changeOpenedFilePath(pathname, oldPathname)
+        this._onDocumentPathChanged(windowId, pathname, oldPathname)
       }
     )
+
+    ipcMain.on('mt::document-path-changed', (e, oldPathname: string, pathname: string) => {
+      const win = BrowserWindow.fromWebContents(e.sender)
+      if (!win) {
+        log.error('mt::document-path-changed: Cannot find window for sender.')
+        return
+      }
+      this._onDocumentPathChanged(win.id, pathname, oldPathname)
+    })
 
     onInternalChannel('window-file-saved', (windowId: number, pathname: string) => {
       // A changed event is emitted earliest after the stability threshold.
@@ -492,6 +498,17 @@ class WindowManager extends TypedEmitter<WindowManagerEvents> {
         browserWindow?.webContents.send('mt::user-preference', userData)
       }
     })
+  }
+
+  _onDocumentPathChanged(windowId: number, pathname: string, oldPathname: string): void {
+    const editor = this.get(windowId) as EditorWindow | undefined
+    if (!editor) {
+      log.error(`Cannot find window id "${windowId}" to change file path.`)
+      return
+    }
+    editor.changeOpenedFilePath(pathname, oldPathname)
+    this._appMenu.replaceRecentlyUsedDocument(oldPathname, pathname)
+    sessionVault.rename(oldPathname, pathname)
   }
 }
 

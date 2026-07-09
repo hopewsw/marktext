@@ -4,6 +4,7 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 import log from 'electron-log'
 import windowStateKeeper from 'electron-window-state'
 import { isChildOfDirectory, isSamePathSync } from 'common/filesystem/paths'
+import { exists } from 'common/filesystem'
 import BaseWindow, { WindowLifecycle, WindowType } from './base'
 import type Accessor from '../app/accessor'
 import { ensureWindowPosition, zoomIn, zoomOut } from './utils'
@@ -590,36 +591,43 @@ class EditorWindow extends BaseWindow {
         }
 
         fileOpenRequests.push(
-          loadMarkdownFile(
-            tab.pathname,
-            eol,
-            autoGuessEncoding,
-            trimTrailingNewline,
-            autoNormalizeLineEndings
-          )
-            .then((rawDocument) => {
-              if (rawDocument.markdown !== tab.markdown) {
-                // File has changed since it was last opened, if it is not saved, we should NOT override the buffer
-                if (tab.isSaved) {
-                  tab.markdown = rawDocument.markdown
-                }
-              }
+          (async() => {
+            if (!(await exists(tab.pathname))) {
+              log.warn(
+                `[BUFFER] File not found on disk, using buffered content: ${tab.pathname}`
+              )
+              return
+            }
 
-              if (!this._openedFiles!.includes(tab.pathname)) {
-                this.addToOpenedFiles(tab.pathname)
-                appMenu.addRecentlyUsedDocument(tab.pathname)
+            const rawDocument = await loadMarkdownFile(
+              tab.pathname,
+              eol,
+              autoGuessEncoding,
+              trimTrailingNewline,
+              autoNormalizeLineEndings
+            )
+
+            if (rawDocument.markdown !== tab.markdown) {
+              // File has changed since it was last opened, if it is not saved, we should NOT override the buffer
+              if (tab.isSaved) {
+                tab.markdown = rawDocument.markdown
               }
+            }
+
+            if (!this._openedFiles!.includes(tab.pathname)) {
+              this.addToOpenedFiles(tab.pathname)
+              appMenu.addRecentlyUsedDocument(tab.pathname)
+            }
+          })().catch((err: Error) => {
+            const { message, stack } = err
+            tab.isSaved = false // Set to false as base file could not be found, needs saving
+            log.error(`[ERROR] Cannot open file: ${message}\n\n${stack}`)
+            browserWindow!.webContents.send('mt::show-notification', {
+              title: `Could not find file ${tab.filename} on disk, please save your work.`,
+              type: 'error',
+              message: err.message
             })
-            .catch((err: Error) => {
-              const { message, stack } = err
-              tab.isSaved = false // Set to false as base file could not be found, needs saving
-              log.error(`[ERROR] Cannot open file: ${message}\n\n${stack}`)
-              browserWindow!.webContents.send('mt::show-notification', {
-                title: `Could not find file ${tab.filename} on disk, please save your work.`,
-                type: 'error',
-                message: err.message
-              })
-            })
+          })
         )
       }
 

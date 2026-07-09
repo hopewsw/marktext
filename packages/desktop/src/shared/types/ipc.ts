@@ -117,6 +117,7 @@ export interface IpcSendChannels {
   'menu-clear-recently-used': []
   'mt::NEED_UPDATE': [payload?: unknown]
   'mt::add-recently-used-document': [filePath: string]
+  'mt::document-path-changed': [oldPathname: string, pathname: string]
   'mt::app-try-quit': []
   'mt::ask-for-image-auto-path': [payload: unknown]
   'mt::ask-for-modify-image-folder-path': [imagePath?: string]
